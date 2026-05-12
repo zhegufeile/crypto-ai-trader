@@ -45,6 +45,7 @@ class SimulatedTrade(BaseModel):
     pnl_usdt: float = 0
     realized_pnl_usdt: float = 0
     unrealized_pnl_usdt: float = 0
+    fees_paid_usdt: float = 0
     exit_reason: str | None = None
     management_plan: list[str] = Field(default_factory=list)
 
@@ -64,7 +65,7 @@ class Simulator:
         tp1_price = self._offset_price(signal.entry, signal.direction.value, risk_unit * 1.0)
         tp2_price = self._offset_price(signal.entry, signal.direction.value, risk_unit * 2.0)
         now = datetime.now(UTC)
-        return SimulatedTrade(
+        trade = SimulatedTrade(
             symbol=signal.symbol,
             direction=signal.direction.value,
             structure=signal.structure.value,
@@ -88,6 +89,9 @@ class Simulator:
             min_price_seen=signal.entry,
             management_plan=signal.management_plan,
         )
+        if not confirmation_required:
+            self._charge_fee(trade, notional_usdt)
+        return trade
 
     def update_trade(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> SimulatedTrade:
         if not trade.is_active:
@@ -143,6 +147,7 @@ class Simulator:
         if self._entry_confirmation_passed(trade, snapshot):
             trade.status = "open"
             trade.entry_confirmed = True
+            self._charge_fee(trade, trade.notional_usdt)
             trade.unrealized_pnl_usdt = self._pnl_for_fraction(
                 trade.direction,
                 trade.entry,
@@ -209,6 +214,7 @@ class Simulator:
             return
         fill_pct = min(size_pct, trade.remaining_size_pct)
         closed_notional = trade.notional_usdt * fill_pct
+        self._charge_fee(trade, closed_notional)
         trade.realized_pnl_usdt += self._pnl_for_fraction(
             trade.direction,
             trade.entry,
@@ -220,6 +226,7 @@ class Simulator:
 
     def _close_trade(self, trade: SimulatedTrade, exit_price: float, reason: str) -> None:
         if trade.remaining_notional_usdt > 0:
+            self._charge_fee(trade, trade.remaining_notional_usdt)
             trade.realized_pnl_usdt += self._pnl_for_fraction(
                 trade.direction,
                 trade.entry,
@@ -240,6 +247,11 @@ class Simulator:
         trade.exit_reason = reason
         trade.unrealized_pnl_usdt = 0
         trade.pnl_usdt = 0
+
+    def _charge_fee(self, trade: SimulatedTrade, notional_usdt: float) -> None:
+        if notional_usdt <= 0:
+            return
+        trade.fees_paid_usdt = round(trade.fees_paid_usdt + notional_usdt * self.settings.simulation_fee_rate, 6)
 
     @staticmethod
     def _has_security_exit(snapshot: MarketSnapshot) -> bool:

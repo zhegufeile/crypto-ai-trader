@@ -10,7 +10,7 @@ from app.core.simulator import SimulatedTrade
 from app.core.signal_engine import SignalEngine
 from app.data.market_collector import MarketCollector
 from app.storage.db import engine
-from app.storage.repositories import SignalRepository, TradeJournalRepository, TradeRepository
+from app.storage.repositories import SignalRepository, TradeFeeRepository, TradeJournalRepository, TradeRepository
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ async def run_scan_once(
         trade_repo = TradeRepository(session)
         signal_repo = SignalRepository(session)
         journal_repo = TradeJournalRepository(session)
+        fee_repo = TradeFeeRepository(session)
         try:
             candidates = await collector.collect_candidates()
         except Exception as exc:
@@ -74,6 +75,7 @@ async def run_scan_once(
             managed_trade = execution_engine.manage_simulated(trade, snapshot)
             trade_repo.update_trade(managed_trade)
             managed_trades.append(managed_trade)
+            _log_fee_delta(before, managed_trade, fee_repo)
             for event_type, message in _journal_events_for_trade_transition(before, managed_trade):
                 journal_repo.log_event(
                     symbol=managed_trade.symbol,
@@ -140,6 +142,7 @@ async def run_scan_once(
             if trade:
                 saved_trade = trade_repo.save_trade(trade)
                 trades.append(saved_trade)
+                _log_fee_delta(None, saved_trade, fee_repo)
                 journal_repo.log_event(
                     symbol=saved_trade.symbol,
                     trade_id=saved_trade.id,
@@ -208,3 +211,30 @@ def _journal_events_for_trade_transition(before: SimulatedTrade, after: Simulate
     if before.status != after.status and after.status == "cancelled":
         events.append(("trade_cancelled", after.exit_reason or "trade cancelled"))
     return events
+
+
+def _log_fee_delta(before: SimulatedTrade | None, after: SimulatedTrade, fee_repo: TradeFeeRepository) -> None:
+    previous = before.fees_paid_usdt if before is not None else 0.0
+    delta = round((after.fees_paid_usdt or 0.0) - (previous or 0.0), 6)
+    if delta <= 0:
+        return
+    fee_repo.log_fee(
+        trade_id=after.id,
+        symbol=after.symbol,
+        event_type=_fee_event_type(before, after),
+        amount_usdt=delta,
+    )
+
+
+def _fee_event_type(before: SimulatedTrade | None, after: SimulatedTrade) -> str:
+    if before is None:
+        return "entry_fee"
+    if before.status == "pending_entry" and after.status == "open":
+        return "entry_fee"
+    if not before.tp1_hit and after.tp1_hit:
+        return "tp1_exit_fee"
+    if not before.tp2_hit and after.tp2_hit:
+        return "tp2_exit_fee"
+    if before.status != after.status and after.status == "closed":
+        return "final_exit_fee"
+    return "trade_fee"

@@ -12,6 +12,7 @@ def main() -> None:
     endpoints = [
         ("/health", "health"),
         ("/health/ready", "ready"),
+        ("/account/summary", "account_summary"),
         ("/strategy-cards", "strategy_cards"),
         ("/strategy-cards/leaderboard?limit=5", "leaderboard"),
         ("/diagnostics/candidates?limit=5", "diagnostics"),

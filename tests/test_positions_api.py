@@ -75,6 +75,14 @@ class FakeResetSignalRepo:
         return 7
 
 
+class FakeResetFeeRepo:
+    def __init__(self, session):
+        self.session = session
+
+    def delete_all(self):
+        return 2
+
+
 def test_positions_api_supports_include_closed(monkeypatch):
     monkeypatch.setattr("app.api.routes_positions.TradeRepository", FakeTradeRepo)
 
@@ -105,6 +113,7 @@ def test_positions_reset_api_clears_runtime_state(monkeypatch):
     monkeypatch.setattr("app.api.routes_positions.SignalRepository", FakeResetSignalRepo)
     monkeypatch.setattr("app.api.routes_positions.TradeRepository", FakeResetTradeRepo)
     monkeypatch.setattr("app.api.routes_positions.TradeJournalRepository", FakeJournalRepo)
+    monkeypatch.setattr("app.api.routes_positions.TradeFeeRepository", FakeResetFeeRepo)
 
     client = TestClient(app)
     response = client.post("/positions/reset")
@@ -115,6 +124,7 @@ def test_positions_reset_api_clears_runtime_state(monkeypatch):
     assert payload["signals_deleted"] == 7
     assert payload["positions_deleted"] == 3
     assert payload["journal_deleted"] == 5
+    assert payload["fees_deleted"] == 2
 
 
 def test_trade_repository_handles_legacy_null_updated_at():

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
 from app.storage.db import get_session
-from app.storage.repositories import SignalRepository, TradeJournalRepository, TradeRepository
+from app.storage.repositories import SignalRepository, TradeFeeRepository, TradeJournalRepository, TradeRepository
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -32,6 +32,7 @@ def reset_simulation_runtime(
         "signals_deleted": 0,
         "positions_deleted": 0,
         "journal_deleted": 0,
+        "fees_deleted": 0,
     }
     if clear_signals:
         result["signals_deleted"] = SignalRepository(session).delete_all()
@@ -39,5 +40,6 @@ def reset_simulation_runtime(
         result["positions_deleted"] = TradeRepository(session).delete_all()
     if clear_journal:
         result["journal_deleted"] = TradeJournalRepository(session).delete_all()
+        result["fees_deleted"] = TradeFeeRepository(session).delete_all()
     result["status"] = "ok"
     return result

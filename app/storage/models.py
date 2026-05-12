@@ -52,6 +52,7 @@ class SimTradeRecord(SQLModel, table=True):
     pnl_usdt: float = 0
     realized_pnl_usdt: float = 0
     unrealized_pnl_usdt: float = 0
+    fees_paid_usdt: float = 0
     exit_reason: str | None = None
     management_plan: str = ""
 
@@ -64,6 +65,15 @@ class TradeJournalRecord(SQLModel, table=True):
     status: str = Field(default="info", index=True)
     message: str
     details: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+
+
+class TradeFeeRecord(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    trade_id: str | None = Field(default=None, index=True)
+    symbol: str = Field(index=True)
+    event_type: str = Field(index=True)
+    amount_usdt: float = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
 
 

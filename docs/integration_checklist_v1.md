@@ -50,6 +50,7 @@ Expected endpoints:
 
 - `/health`
 - `/health/ready`
+- `/account/summary`
 - `/strategy-cards`
 - `/strategy-cards/leaderboard`
 - `/diagnostics/candidates`

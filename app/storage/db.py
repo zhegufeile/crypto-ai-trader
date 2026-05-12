@@ -2,7 +2,7 @@ from sqlalchemy import inspect, text
 from sqlmodel import SQLModel, Session, create_engine
 
 from app.config import Settings, get_settings
-from app.storage.models import SimTradeRecord, TradeJournalRecord
+from app.storage.models import SimTradeRecord, TradeFeeRecord, TradeJournalRecord
 
 
 def build_engine(settings: Settings | None = None):
@@ -19,6 +19,7 @@ def init_db() -> None:
     _ensure_sqlite_trade_columns()
     _ensure_sqlite_strategy_metric_columns()
     _ensure_sqlite_trade_journal_columns()
+    _ensure_sqlite_trade_fee_columns()
 
 
 def get_session():
@@ -59,6 +60,7 @@ def _ensure_sqlite_trade_columns() -> None:
         "min_price_seen": "FLOAT",
         "realized_pnl_usdt": "FLOAT DEFAULT 0",
         "unrealized_pnl_usdt": "FLOAT DEFAULT 0",
+        "fees_paid_usdt": "FLOAT DEFAULT 0",
         "exit_reason": "TEXT",
         "management_plan": "TEXT DEFAULT ''",
     }
@@ -112,6 +114,31 @@ def _ensure_sqlite_trade_journal_columns() -> None:
         "status": "TEXT DEFAULT 'info'",
         "message": "TEXT DEFAULT ''",
         "details": "TEXT DEFAULT ''",
+        "created_at": "TIMESTAMP",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in desired_columns.items():
+            if column_name in existing_columns:
+                continue
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"))
+
+
+def _ensure_sqlite_trade_fee_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    table_name = TradeFeeRecord.__tablename__
+    inspector = inspect(engine)
+    if table_name not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+    desired_columns = {
+        "trade_id": "TEXT",
+        "symbol": "TEXT",
+        "event_type": "TEXT",
+        "amount_usdt": "FLOAT DEFAULT 0",
         "created_at": "TIMESTAMP",
     }
 

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     watchlist_strategy_bonus_multiplier: float = 0.45
     tier_score_bonus_scale: float = 0.06
 
+    simulation_starting_balance_usdt: float = 10000
+    simulation_fee_rate: float = 0.0004
     max_position_notional_usdt: float = 100
     max_open_positions: int = 3
     max_same_direction_positions: int = 2

@@ -6,7 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import routes_admin, routes_diagnostics, routes_health, routes_positions, routes_signals, routes_strategy_cards
+from app.api import (
+    routes_account,
+    routes_admin,
+    routes_diagnostics,
+    routes_health,
+    routes_positions,
+    routes_signals,
+    routes_strategy_cards,
+)
 from app.config import get_settings
 from app.core.scheduler import build_scheduler
 from app.logging_config import configure_logging
@@ -43,6 +51,7 @@ if frontend_origins:
     )
 
 app.include_router(routes_health.router)
+app.include_router(routes_account.router)
 app.include_router(routes_diagnostics.router)
 app.include_router(routes_signals.router)
 app.include_router(routes_positions.router)
@@ -60,3 +69,11 @@ def dashboard_index():
     if index_file.exists():
         return FileResponse(index_file)
     return {"status": "frontend_not_configured"}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    favicon_file = frontend_dir / "favicon.svg"
+    if favicon_file.exists():
+        return FileResponse(favicon_file, media_type="image/svg+xml")
+    return {"status": "favicon_not_configured"}

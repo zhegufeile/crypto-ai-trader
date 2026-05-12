@@ -10,6 +10,7 @@ from app.storage.models import (
     SignalRecord,
     SimTradeRecord,
     StrategyMetricRecord,
+    TradeFeeRecord,
     TradeJournalRecord,
 )
 
@@ -167,6 +168,43 @@ class TradeJournalRepository:
 
     def delete_all(self) -> int:
         records = list(self.session.exec(select(TradeJournalRecord)).all())
+        count = len(records)
+        for record in records:
+            self.session.delete(record)
+        self.session.commit()
+        return count
+
+
+class TradeFeeRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def log_fee(self, *, trade_id: str | None, symbol: str, event_type: str, amount_usdt: float) -> TradeFeeRecord:
+        record = TradeFeeRecord(
+            trade_id=trade_id,
+            symbol=symbol,
+            event_type=event_type,
+            amount_usdt=amount_usdt,
+        )
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return record
+
+    def list_all(self) -> list[TradeFeeRecord]:
+        statement = select(TradeFeeRecord).order_by(TradeFeeRecord.created_at.desc())
+        return list(self.session.exec(statement).all())
+
+    def sum_since(self, cutoff: datetime) -> float:
+        records = self.session.exec(select(TradeFeeRecord).where(TradeFeeRecord.created_at >= cutoff)).all()
+        return round(sum(record.amount_usdt for record in records), 6)
+
+    def sum_all(self) -> float:
+        records = self.session.exec(select(TradeFeeRecord)).all()
+        return round(sum(record.amount_usdt for record in records), 6)
+
+    def delete_all(self) -> int:
+        records = list(self.session.exec(select(TradeFeeRecord)).all())
         count = len(records)
         for record in records:
             self.session.delete(record)
