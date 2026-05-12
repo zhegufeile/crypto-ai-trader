@@ -1,0 +1,182 @@
+{
+  "files": [
+    {
+      "file": "data\\Arya_web3\\posts.csv",
+      "input_posts": 868,
+      "unique_posts": 851,
+      "kept_posts": 175,
+      "rejected_posts": 676,
+      "clusters": 56,
+      "cards": 5,
+      "raw_cards": 56,
+      "card_names": [
+        "arya_web3_generic",
+        "arya_web3_rave",
+        "arya_web3_siren",
+        "arya_web3_peace",
+        "arya_web3_bsb"
+      ]
+    },
+    {
+      "file": "data\\BTC_Alert_\\posts.csv",
+      "input_posts": 1015,
+      "unique_posts": 1000,
+      "kept_posts": 106,
+      "rejected_posts": 894,
+      "clusters": 34,
+      "cards": 4,
+      "raw_cards": 34,
+      "card_names": [
+        "btc_alert_generic",
+        "btc_alert_btc",
+        "btc_alert_rave",
+        "btc_alert_aria"
+      ]
+    },
+    {
+      "file": "data\\thecryptoskanda\\posts.csv",
+      "input_posts": 1013,
+      "unique_posts": 1005,
+      "kept_posts": 88,
+      "rejected_posts": 917,
+      "clusters": 13,
+      "cards": 1,
+      "raw_cards": 13,
+      "card_names": [
+        "thecryptoskanda_generic"
+      ]
+    },
+    {
+      "file": "data\\derrrrrrq\\posts.csv",
+      "input_posts": 1012,
+      "unique_posts": 985,
+      "kept_posts": 181,
+      "rejected_posts": 804,
+      "clusters": 20,
+      "cards": 4,
+      "raw_cards": 20,
+      "card_names": [
+        "derrrrrrq_generic",
+        "derrrrrrq_lab",
+        "derrrrrrq_rave",
+        "derrrrrrq_siren"
+      ]
+    },
+    {
+      "file": "data\\CryptoRounder\\posts.csv",
+      "input_posts": 1009,
+      "unique_posts": 996,
+      "kept_posts": 94,
+      "rejected_posts": 902,
+      "clusters": 15,
+      "cards": 3,
+      "raw_cards": 15,
+      "card_names": [
+        "cryptorounder_generic",
+        "cryptorounder_btc",
+        "cryptorounder_100"
+      ]
+    },
+    {
+      "file": "data\\lanaaielsa\\posts.csv",
+      "input_posts": 1009,
+      "unique_posts": 995,
+      "kept_posts": 147,
+      "rejected_posts": 848,
+      "clusters": 63,
+      "cards": 5,
+      "raw_cards": 63,
+      "card_names": [
+        "lanaaielsa_generic",
+        "lanaaielsa_pnkstr",
+        "lanaaielsa_hype",
+        "lanaaielsa_molt",
+        "lanaaielsa_trump"
+      ]
+    }
+  ],
+  "totals": {
+    "input_posts": 5926,
+    "unique_posts": 5832,
+    "kept_posts": 791,
+    "rejected_posts": 5041,
+    "clusters": 201,
+    "cards": 22
+  },
+  "top_symbols": [
+    [
+      "RAVE",
+      53
+    ],
+    [
+      "BTC",
+      35
+    ],
+    [
+      "LAB",
+      25
+    ],
+    [
+      "SIREN",
+      25
+    ],
+    [
+      "PNKSTR",
+      17
+    ],
+    [
+      "HYPE",
+      14
+    ],
+    [
+      "WLFI",
+      10
+    ],
+    [
+      "BASED",
+      9
+    ],
+    [
+      "PRL",
+      9
+    ],
+    [
+      "TRADOOR",
+      9
+    ]
+  ],
+  "top_authors": [
+    [
+      "derrrrrrq",
+      181
+    ],
+    [
+      "Arya_web3",
+      175
+    ],
+    [
+      "lanaaielsa",
+      147
+    ],
+    [
+      "BTC_Alert_",
+      106
+    ],
+    [
+      "CryptoRounder",
+      94
+    ],
+    [
+      "thecryptoskanda",
+      88
+    ]
+  ],
+  "kol_notes": [
+    "obsidian\\kol_notes\\arya_web3.md",
+    "obsidian\\kol_notes\\btc_alert.md",
+    "obsidian\\kol_notes\\cryptorounder.md",
+    "obsidian\\kol_notes\\derrrrrrq.md",
+    "obsidian\\kol_notes\\lanaaielsa.md",
+    "obsidian\\kol_notes\\thecryptoskanda.md"
+  ]
+}

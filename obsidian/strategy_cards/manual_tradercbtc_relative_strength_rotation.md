@@ -1,0 +1,19 @@
+# manual_tradercbtc_relative_strength_rotation
+
+- description: Start from sector or theme leadership, then trade the leader coin on clean retests rather than chasing the first vertical move.
+- market: bullish
+- timeframe: intraday
+- creator: manual_review
+- confidence_bias: 0.13
+- preferred_symbols: none
+- avoided_symbols: none
+- preferred_market_states: trend_or_acceleration, uptrend_pullback
+- entry_conditions: breakout, volume_expansion, pullback_confirmation, relative_strength_leader
+- exit_conditions: stop_loss_hit, target_reached, support_lost, leader_loses_relative_strength
+- invalidation_conditions: sector_rotation_fades, failed_follow_through_after_retest, btc_turns_against_setup, liquidity_deteriorates
+- risk_notes: begin from where capital is concentrating instead of starting from a random single-coin chart, prefer the name that holds structure best when BTC pauses or pulls back, do not chase the first expansion candle if a cleaner retest is likely to come
+- historical_win_rate: unknown
+- historical_rr: unknown
+- sample_size: 1
+- tags: execution, relative-strength, rotation, sector-leader
+- source_posts: 1

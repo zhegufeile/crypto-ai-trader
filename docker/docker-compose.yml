@@ -1,0 +1,11 @@
+services:
+  trader:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../crypto_ai_trader.db:/app/crypto_ai_trader.db

@@ -1,0 +1,44 @@
+{
+  "name": "strong_card",
+  "description": "Strategy card for strong_card: entry=breakout, volume_expansion; market_state=trend_or_acceleration.",
+  "market": "any",
+  "timeframe": "any",
+  "creator": "tester",
+  "confidence_bias": 0.11,
+  "preferred_symbols": [
+    "BTCUSDT"
+  ],
+  "avoided_symbols": [],
+  "preferred_market_states": [
+    "trend_or_acceleration"
+  ],
+  "entry_conditions": [
+    "breakout",
+    "volume_expansion"
+  ],
+  "exit_conditions": [
+    "stop_loss_hit",
+    "target_reached"
+  ],
+  "invalidation_conditions": [
+    "btc_turns_against_setup",
+    "liquidity_deteriorates",
+    "funding_overheats"
+  ],
+  "risk_notes": [
+    "kol posts are sentiment factors, not direct trade orders",
+    "verify liquidity, funding and BTC backdrop before entry"
+  ],
+  "historical_win_rate": null,
+  "historical_rr": null,
+  "sample_size": 1,
+  "tags": [
+    "breakout",
+    "volume"
+  ],
+  "source_posts": 1,
+  "strategy_tier": "watchlist",
+  "tier_score": 0.0,
+  "tier_rationale": [],
+  "updated_at": "2026-05-11T16:02:36.597410Z"
+}

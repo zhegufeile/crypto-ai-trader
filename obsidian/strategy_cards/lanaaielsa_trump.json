@@ -1,0 +1,41 @@
+{
+  "name": "lanaaielsa_trump",
+  "description": "Strategy card for lanaaielsa_trump: entry=breakout, sentiment_tailwind; market_state=trend_or_acceleration.",
+  "market": "bullish",
+  "timeframe": "any",
+  "creator": "lanaaielsa",
+  "confidence_bias": 0.11,
+  "preferred_symbols": [
+    "TRUMP"
+  ],
+  "avoided_symbols": [],
+  "preferred_market_states": [
+    "trend_or_acceleration"
+  ],
+  "entry_conditions": [
+    "breakout",
+    "sentiment_tailwind"
+  ],
+  "exit_conditions": [
+    "stop_loss_hit",
+    "target_reached"
+  ],
+  "invalidation_conditions": [
+    "btc_turns_against_setup",
+    "liquidity_deteriorates",
+    "funding_overheats"
+  ],
+  "risk_notes": [
+    "kol posts are sentiment factors, not direct trade orders",
+    "verify liquidity, funding and BTC backdrop before entry"
+  ],
+  "historical_win_rate": null,
+  "historical_rr": null,
+  "sample_size": 7,
+  "tags": [
+    "breakout",
+    "sentiment"
+  ],
+  "source_posts": 7,
+  "updated_at": "2026-05-09T19:50:35.029925Z"
+}

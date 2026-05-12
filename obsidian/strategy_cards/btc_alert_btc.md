@@ -1,0 +1,19 @@
+# btc_alert_btc
+
+- description: Strategy card for btc_alert_btc: entry=oi_rising, sentiment_tailwind; market_state=any_market.
+- market: bearish
+- timeframe: intraday
+- creator: BTC_Alert_
+- confidence_bias: 0.11
+- preferred_symbols: BTC, EDGE, KAT, ROBO, UGL, XAU
+- avoided_symbols: none
+- preferred_market_states: none
+- entry_conditions: oi_rising, sentiment_tailwind
+- exit_conditions: stop_loss_hit, target_reached
+- invalidation_conditions: btc_turns_against_setup, liquidity_deteriorates, funding_overheats
+- risk_notes: kol posts are sentiment factors, not direct trade orders, verify liquidity, funding and BTC backdrop before entry
+- historical_win_rate: unknown
+- historical_rr: unknown
+- sample_size: 9
+- tags: oi, sentiment
+- source_posts: 9

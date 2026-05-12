@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "buyTaxes": null,
+      "chainId": "501",
+      "isAirdropScam": false,
+      "isChainSupported": true,
+      "isCounterfeit": false,
+      "isDumping": false,
+      "isFakeLiquidity": false,
+      "isFundLinkage": false,
+      "isHasAssetEditAuth": false,
+      "isHasBlockingHis": false,
+      "isHasFrozenAuth": false,
+      "isHoneypot": false,
+      "isLiquidityRemoval": false,
+      "isLowLiquidity": false,
+      "isMintable": false,
+      "isNotOpenSource": true,
+      "isNotRenounced": false,
+      "isOverIssued": false,
+      "isPump": false,
+      "isRubbishAirdrop": false,
+      "isVeryHighLpHolderProp": false,
+      "isVeryLowLpBurn": false,
+      "isWash": false,
+      "isWash2": false,
+      "riskLevel": "HIGH",
+      "sellTaxes": null,
+      "tokenAddress": "so11111111111111111111111111111111111111112"
+    }
+  ]
+}

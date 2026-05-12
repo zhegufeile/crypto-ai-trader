@@ -1,0 +1,19 @@
+# cryptorounder_100
+
+- description: Strategy card for cryptorounder_100: entry=pullback_confirmation; market_state=uptrend_pullback.
+- market: bearish
+- timeframe: any
+- creator: CryptoRounder
+- confidence_bias: 0.07
+- preferred_symbols: 100, 100（如左图），近一轮, 100，当, BTC, CRCL, STRC
+- avoided_symbols: none
+- preferred_market_states: uptrend_pullback
+- entry_conditions: pullback_confirmation
+- exit_conditions: stop_loss_hit, target_reached, support_lost
+- invalidation_conditions: btc_turns_against_setup, liquidity_deteriorates, funding_overheats
+- risk_notes: kol posts are sentiment factors, not direct trade orders, verify liquidity, funding and BTC backdrop before entry
+- historical_win_rate: unknown
+- historical_rr: unknown
+- sample_size: 6
+- tags: pullback
+- source_posts: 6

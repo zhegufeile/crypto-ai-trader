@@ -1,0 +1,21 @@
+﻿{
+  "data": [
+    {
+      "timestamp": "1710000000000",
+      "chainIndex": "501",
+      "walletType": "1,2",
+      "triggerWalletCount": "4",
+      "triggerWalletAddress": "addr1,addr2",
+      "amountUsd": "125000",
+      "soldRatioPercent": "18",
+      "token": {
+        "tokenAddress": "So11111111111111111111111111111111111111112",
+        "symbol": "PNKSTR",
+        "name": "Pink Star",
+        "marketCapUsd": "3500000",
+        "holders": "2400",
+        "top10HolderPercent": "32"
+      }
+    }
+  ]
+}

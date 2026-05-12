@@ -1,0 +1,9 @@
+{
+  "source": "okx_onchainos",
+  "kind": "risk_snapshot",
+  "risks": [],
+  "meta": {
+    "count": 0,
+    "default_chain": null
+  }
+}

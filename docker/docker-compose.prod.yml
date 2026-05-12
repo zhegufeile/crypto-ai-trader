@@ -1,0 +1,32 @@
+services:
+  trader:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      FRONTEND_ORIGINS: '["https://www.pluseclould.xyz"]'
+    restart: unless-stopped
+    volumes:
+      - ../crypto_ai_trader.db:/app/crypto_ai_trader.db
+      - ../data:/app/data
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - trader
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: www.pluseclould.xyz
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

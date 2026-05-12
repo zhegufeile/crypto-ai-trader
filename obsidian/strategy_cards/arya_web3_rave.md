@@ -1,0 +1,19 @@
+# arya_web3_rave
+
+- description: Strategy card for arya_web3_rave: entry=oi_rising, pullback_confirmation; market_state=uptrend_pullback.
+- market: bearish
+- timeframe: any
+- creator: Arya_web3
+- confidence_bias: 0.11
+- preferred_symbols: RAVE, SIREN, TRADOOR
+- avoided_symbols: none
+- preferred_market_states: uptrend_pullback
+- entry_conditions: oi_rising, pullback_confirmation
+- exit_conditions: stop_loss_hit, target_reached, support_lost
+- invalidation_conditions: btc_turns_against_setup, liquidity_deteriorates, funding_overheats
+- risk_notes: kol posts are sentiment factors, not direct trade orders, verify liquidity, funding and BTC backdrop before entry
+- historical_win_rate: unknown
+- historical_rr: unknown
+- sample_size: 18
+- tags: oi, pullback
+- source_posts: 18

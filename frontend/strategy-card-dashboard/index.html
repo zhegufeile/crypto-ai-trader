@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto AI Trader Dashboard</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Crypto AI Trader</p>
+        <h1>Strategy Cards + Candidate Diagnostics</h1>
+        <p class="lead">
+          The top section tracks strategy-card quality. The bottom section shows why each candidate coin
+          passes or gets rejected. The goal is fast judgment, not dense dashboards.
+        </p>
+      </div>
+      <div class="hero-panel">
+        <div class="panel-label">Data Sources</div>
+        <div id="source-status" class="panel-value">Loading</div>
+        <div class="panel-sub">From <code>/strategy-cards</code> and <code>/diagnostics/candidates</code></div>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <div class="stat-card">
+        <span class="stat-label">Strategy Cards</span>
+        <strong id="stat-cards">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Samples</span>
+        <strong id="stat-samples">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Average Win Rate</span>
+        <strong id="stat-winrate">0%</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Average RR</span>
+        <strong id="stat-rr">0.00</strong>
+      </div>
+    </section>
+
+    <section class="summary-grid diagnostics-grid">
+      <div class="stat-card">
+        <span class="stat-label">Avg Hold Hours</span>
+        <strong id="stat-hold-hours">0.00</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Avg TP1 Hit Rate</span>
+        <strong id="stat-tp1">0%</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Avg TP2 Hit Rate</span>
+        <strong id="stat-tp2">0%</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Avg Max Drawdown RR</span>
+        <strong id="stat-drawdown">0.00</strong>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <input id="search" type="search" placeholder="Search cards, KOLs, symbols, tags" />
+      <select id="sort">
+        <option value="score">Sort by composite score</option>
+        <option value="win_rate">Sort by win rate</option>
+        <option value="sample_size">Sort by sample size</option>
+        <option value="rr">Sort by average RR</option>
+      </select>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Core Strategies</p>
+        <h2>Strategy Leaderboard</h2>
+        <p class="section-lead">
+          A ranked shortlist of the strategy cards most worth keeping in the system right now.
+        </p>
+      </div>
+      <div class="hero-panel mini-panel">
+        <div class="panel-label">Leaderboard</div>
+        <div id="leaderboard-status" class="panel-value">Loading</div>
+        <div class="panel-sub">From <code>/strategy-cards/leaderboard</code></div>
+      </div>
+    </section>
+
+    <section id="leaderboard" class="cards diagnostics-cards"></section>
+
+    <section id="cards" class="cards"></section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Candidate Diagnostics</p>
+        <h2>Live Candidate Review</h2>
+        <p class="section-lead">
+          See current scan results with Binance structure, onchain signal strength, and security risk in one place.
+        </p>
+        <div class="mode-switch" role="group" aria-label="Strategy tier mode">
+          <button id="diag-mode-core-candidate" class="mode-button active" type="button">Core + Candidate</button>
+          <button id="diag-mode-core-only" class="mode-button" type="button">Core Only</button>
+          <button id="diag-mode-all" class="mode-button" type="button">All Tiers</button>
+        </div>
+      </div>
+      <div class="hero-panel mini-panel">
+        <div class="panel-label">Diagnostics</div>
+        <div id="diagnostic-status" class="panel-value">Loading</div>
+        <div class="panel-sub">From <code>/diagnostics/candidates?tier_mode=...</code></div>
+      </div>
+    </section>
+
+    <section class="summary-grid diagnostics-grid">
+      <div class="stat-card">
+        <span class="stat-label">Tradeable</span>
+        <strong id="diag-tradeable">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Blocked</span>
+        <strong id="diag-blocked">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Avg Onchain Signal</span>
+        <strong id="diag-onchain">0.00</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Honeypot Blocks</span>
+        <strong id="diag-honeypot">0</strong>
+      </div>
+    </section>
+
+    <section id="diagnostics" class="cards diagnostics-cards"></section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Positions</p>
+        <h2>Position Panel</h2>
+        <p class="section-lead">
+          Track live simulation positions, pending confirmations, and realized versus unrealized PnL.
+        </p>
+      </div>
+      <div class="hero-panel mini-panel">
+        <div class="panel-label">Position Feed</div>
+        <div id="position-status" class="panel-value">Loading</div>
+        <div class="panel-sub">From <code>/positions?include_closed=true</code></div>
+      </div>
+    </section>
+
+    <section class="summary-grid diagnostics-grid">
+      <div class="stat-card">
+        <span class="stat-label">Active Positions</span>
+        <strong id="pos-active">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Pending Entry</span>
+        <strong id="pos-pending">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Realized PnL</span>
+        <strong id="pos-realized">0.00</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Unrealized PnL</span>
+        <strong id="pos-unrealized">0.00</strong>
+      </div>
+    </section>
+
+    <section id="positions" class="cards positions-cards"></section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Trade Review</p>
+        <h2>Journal Timeline</h2>
+        <p class="section-lead">
+          Review the latest open, confirm, take-profit, cancel, close, and circuit-breaker events as a readable timeline.
+        </p>
+      </div>
+      <div class="hero-panel mini-panel">
+        <div class="panel-label">Journal Feed</div>
+        <div id="journal-status" class="panel-value">Loading</div>
+        <div class="panel-sub">From <code>/positions/journal</code></div>
+      </div>
+    </section>
+
+    <section class="summary-grid diagnostics-grid">
+      <div class="stat-card">
+        <span class="stat-label">Journal Events</span>
+        <strong id="journal-count">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Blocked / Warning</span>
+        <strong id="journal-warnings">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Closed Trades</span>
+        <strong id="journal-closed">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Circuit Breakers</span>
+        <strong id="journal-circuits">0</strong>
+      </div>
+    </section>
+
+    <section id="journal" class="cards positions-cards"></section>
+  </main>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

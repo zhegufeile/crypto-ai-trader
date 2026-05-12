@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "bundleHoldingPercent": "",
+      "chainIndex": "501",
+      "createTime": "",
+      "creatorAddress": "",
+      "devCreateTokenCount": "1",
+      "devHoldingPercent": "",
+      "devLaunchedTokenCount": "0",
+      "devRugPullTokenCount": "1",
+      "isInternal": false,
+      "lpBurnedPercent": "",
+      "progress": "",
+      "protocolId": "",
+      "riskControlLevel": "1",
+      "sniperHoldingPercent": "",
+      "snipersClearAddressCount": "",
+      "snipersTotal": "",
+      "suspiciousHoldingPercent": "",
+      "tokenContractAddress": "so11111111111111111111111111111111111111112",
+      "tokenTags": [],
+      "top10HoldPercent": "0",
+      "totalFee": "0"
+    }
+  ]
+}

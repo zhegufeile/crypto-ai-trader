@@ -1,0 +1,35 @@
+{
+  "source": "okx_onchainos",
+  "kind": "signal_snapshot",
+  "signals": [
+    {
+      "symbol": "PNKSTR",
+      "token_symbol": "PNKSTR",
+      "token_name": "Pink Star",
+      "token_address": "so11111111111111111111111111111111111111112",
+      "chain": "solana",
+      "chain_index": "501",
+      "timestamp": "1710000000000",
+      "signal_score": 0.95,
+      "wallet_count": 4,
+      "buy_amount_usd": 125000.0,
+      "sold_ratio_percent": 18.0,
+      "wallet_types": [
+        "smart_money",
+        "kol"
+      ],
+      "trigger_wallet_address": "addr1,addr2",
+      "price": null,
+      "market_cap_usd": 3500000.0,
+      "holders": 2400,
+      "top10_holder_percent": 32.0,
+      "cursor": null
+    }
+  ],
+  "meta": {
+    "count": 1,
+    "default_chain": "solana",
+    "min_signal_score": 0.55,
+    "min_wallet_count": 2
+  }
+}
