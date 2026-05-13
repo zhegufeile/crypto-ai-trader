@@ -11,12 +11,17 @@ const state = {
   strategyPage: 1,
   strategyPageSize: 6,
   selectedStrategyName: null,
+  isRefreshing: false,
 };
+
+const DASHBOARD_REFRESH_MS = 15000;
+let refreshTimer = null;
 
 const els = {
   runtimeStatus: document.getElementById("runtime-status"),
   runtimeMode: document.getElementById("runtime-mode"),
   runtimeUpdated: document.getElementById("runtime-updated"),
+  runtimeRefresh: document.getElementById("runtime-refresh"),
   heroEquity: document.getElementById("hero-equity"),
   heroAvailable: document.getElementById("hero-available"),
   heroPnl24h: document.getElementById("hero-pnl-24h"),
@@ -579,12 +584,31 @@ function setDiagnosticMode(mode) {
 }
 
 async function loadDashboard() {
+  if (state.isRefreshing) {
+    return;
+  }
+  state.isRefreshing = true;
   try {
     await Promise.all([loadAccount(), loadCards(), loadDiagnostics(), loadPositions(), loadJournal()]);
   } catch (error) {
     els.runtimeStatus.textContent = "Dashboard load failed";
     console.error(error);
+  } finally {
+    state.isRefreshing = false;
+    els.runtimeRefresh.textContent = `Auto refresh every ${Math.round(DASHBOARD_REFRESH_MS / 1000)}s`;
   }
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+  }
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState !== "visible") {
+      return;
+    }
+    loadDashboard();
+  }, DASHBOARD_REFRESH_MS);
 }
 
 els.tabButtons.forEach((button) => button.addEventListener("click", () => setView(button.dataset.tab)));
@@ -600,3 +624,10 @@ els.diagModeAll.addEventListener("click", () => setDiagnosticMode("all"));
 
 setView("overview");
 loadDashboard();
+startAutoRefresh();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    loadDashboard();
+  }
+});

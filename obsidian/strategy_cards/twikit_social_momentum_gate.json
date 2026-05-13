@@ -1,0 +1,54 @@
+{
+  "name": "twikit_social_momentum_gate",
+  "description": "Strategy card for twikit_social_momentum_gate: entry=multiple_kol_alignment, breakout_follow_through, volume_expansion, narrative_velocity; market_state=trend_or_acceleration, first_reversal.",
+  "market": "any",
+  "timeframe": "swing",
+  "creator": "twikit_x_feed",
+  "confidence_bias": 0.09,
+  "preferred_symbols": [],
+  "avoided_symbols": [],
+  "preferred_market_states": [
+    "trend_or_acceleration",
+    "first_reversal"
+  ],
+  "entry_conditions": [
+    "multiple_kol_alignment",
+    "breakout_follow_through",
+    "volume_expansion",
+    "narrative_velocity"
+  ],
+  "exit_conditions": [
+    "stop_loss_hit",
+    "target_reached",
+    "narrative_fades",
+    "liquidity_deteriorates"
+  ],
+  "invalidation_conditions": [
+    "single_post_hype",
+    "one_off_mentions_only",
+    "btc_turns_against_setup",
+    "liquidity_deteriorates",
+    "funding_overheats"
+  ],
+  "risk_notes": [
+    "X posts are sentiment factors, not direct trade orders; require cross-account confirmation, liquidity, and BTC backdrop before entry"
+  ],
+  "historical_win_rate": null,
+  "historical_rr": null,
+  "sample_size": 0,
+  "strategy_tier": "watchlist",
+  "tier_score": 38.0,
+  "tier_rationale": [
+    "social narrative is useful only when multiple credible accounts align",
+    "single-post hype is ignored",
+    "best used as a confirmation layer"
+  ],
+  "tags": [
+    "x",
+    "kol",
+    "narrative",
+    "momentum",
+    "sentiment"
+  ],
+  "source_posts": 0
+}

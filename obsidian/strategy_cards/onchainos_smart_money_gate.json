@@ -1,0 +1,56 @@
+{
+  "name": "onchainos_smart_money_gate",
+  "description": "Strategy card for onchainos_smart_money_gate: entry=smart_money_signal_cluster, wallet_count_confirmation, buy_amount_threshold, low_sold_ratio, risk_screen_passed; market_state=accumulation_breakout, trend_confirmation.",
+  "market": "any",
+  "timeframe": "intraday",
+  "creator": "okx_onchainos",
+  "confidence_bias": 0.1,
+  "preferred_symbols": [],
+  "avoided_symbols": [],
+  "preferred_market_states": [
+    "accumulation_breakout",
+    "trend_confirmation"
+  ],
+  "entry_conditions": [
+    "smart_money_signal_cluster",
+    "wallet_count_confirmation",
+    "buy_amount_threshold",
+    "low_sold_ratio",
+    "risk_screen_passed"
+  ],
+  "exit_conditions": [
+    "stop_loss_hit",
+    "target_reached",
+    "signal_decay",
+    "security_flags_triggered"
+  ],
+  "invalidation_conditions": [
+    "honeypot_detected",
+    "risk_level_critical",
+    "liquidity_deteriorates",
+    "holder_concentration_spikes",
+    "sold_ratio_expands",
+    "btc_turns_against_setup"
+  ],
+  "risk_notes": [
+    "onchain signal is a confirmation layer, not a standalone buy; always verify token risk, liquidity, holder concentration, and BTC backdrop before entry"
+  ],
+  "historical_win_rate": null,
+  "historical_rr": null,
+  "sample_size": 1,
+  "strategy_tier": "watchlist",
+  "tier_score": 42.0,
+  "tier_rationale": [
+    "snapshot-based rule set",
+    "needs more live samples",
+    "strength comes from multi-wallet confirmation, not isolated wallets"
+  ],
+  "tags": [
+    "onchain",
+    "smart_money",
+    "risk_gate",
+    "cluster",
+    "liquidity"
+  ],
+  "source_posts": 1
+}
