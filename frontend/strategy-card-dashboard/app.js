@@ -16,6 +16,8 @@ const state = {
 
 const DASHBOARD_REFRESH_MS = 15000;
 let refreshTimer = null;
+let refreshCountdownTimer = null;
+let nextRefreshAt = null;
 
 const els = {
   runtimeStatus: document.getElementById("runtime-status"),
@@ -119,7 +121,15 @@ function scoreCard(card) {
 }
 
 async function fetchJson(path) {
-  const response = await fetch(path);
+  const separator = path.includes("?") ? "&" : "?";
+  const cacheBustPath = `${path}${separator}_ts=${Date.now()}`;
+  const response = await fetch(cacheBustPath, {
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache, no-store, max-age=0",
+      Pragma: "no-cache",
+    },
+  });
   if (!response.ok) throw new Error(`HTTP ${response.status} for ${path}`);
   return response.json();
 }
@@ -588,6 +598,7 @@ async function loadDashboard() {
     return;
   }
   state.isRefreshing = true;
+  els.runtimeRefresh.textContent = "Refreshing now";
   try {
     await Promise.all([loadAccount(), loadCards(), loadDiagnostics(), loadPositions(), loadJournal()]);
   } catch (error) {
@@ -595,7 +606,7 @@ async function loadDashboard() {
     console.error(error);
   } finally {
     state.isRefreshing = false;
-    els.runtimeRefresh.textContent = `Auto refresh every ${Math.round(DASHBOARD_REFRESH_MS / 1000)}s`;
+    scheduleNextRefreshLabel();
   }
 }
 
@@ -603,12 +614,38 @@ function startAutoRefresh() {
   if (refreshTimer) {
     clearInterval(refreshTimer);
   }
+  if (refreshCountdownTimer) {
+    clearInterval(refreshCountdownTimer);
+  }
+  nextRefreshAt = Date.now() + DASHBOARD_REFRESH_MS;
   refreshTimer = setInterval(() => {
     if (document.visibilityState !== "visible") {
       return;
     }
+    nextRefreshAt = Date.now() + DASHBOARD_REFRESH_MS;
     loadDashboard();
   }, DASHBOARD_REFRESH_MS);
+  refreshCountdownTimer = setInterval(updateRefreshLabel, 1000);
+  updateRefreshLabel();
+}
+
+function updateRefreshLabel() {
+  if (state.isRefreshing) {
+    els.runtimeRefresh.textContent = "Refreshing now";
+    return;
+  }
+  if (!nextRefreshAt) {
+    els.runtimeRefresh.textContent = `Auto refresh every ${Math.round(DASHBOARD_REFRESH_MS / 1000)}s`;
+    return;
+  }
+  const remainingMs = Math.max(nextRefreshAt - Date.now(), 0);
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  els.runtimeRefresh.textContent = `Next refresh in ${remainingSeconds}s`;
+}
+
+function scheduleNextRefreshLabel() {
+  nextRefreshAt = Date.now() + DASHBOARD_REFRESH_MS;
+  updateRefreshLabel();
 }
 
 els.tabButtons.forEach((button) => button.addEventListener("click", () => setView(button.dataset.tab)));
@@ -628,6 +665,7 @@ startAutoRefresh();
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
+    scheduleNextRefreshLabel();
     loadDashboard();
   }
 });
