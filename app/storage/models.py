@@ -15,6 +15,8 @@ class SignalRecord(SQLModel, table=True):
     take_profit: float
     structure: str
     reasons: str
+    primary_strategy_name: str | None = None
+    matched_strategy_names: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
 
 
@@ -27,7 +29,9 @@ class SimTradeRecord(SQLModel, table=True):
     stop_loss: float
     take_profit: float
     notional_usdt: float
+    quantity: float = 0
     remaining_notional_usdt: float = 0
+    remaining_quantity: float = 0
     initial_stop_loss: float = 0
     current_stop_loss: float = 0
     tp1_price: float = 0
@@ -55,6 +59,8 @@ class SimTradeRecord(SQLModel, table=True):
     fees_paid_usdt: float = 0
     exit_reason: str | None = None
     management_plan: str = ""
+    primary_strategy_name: str | None = None
+    matched_strategy_names: str = ""
 
 
 class TradeJournalRecord(SQLModel, table=True):

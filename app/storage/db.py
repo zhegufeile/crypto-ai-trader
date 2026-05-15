@@ -17,6 +17,7 @@ engine = build_engine()
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _ensure_sqlite_trade_columns()
+    _ensure_sqlite_signal_columns()
     _ensure_sqlite_strategy_metric_columns()
     _ensure_sqlite_trade_journal_columns()
     _ensure_sqlite_trade_fee_columns()
@@ -39,7 +40,9 @@ def _ensure_sqlite_trade_columns() -> None:
     existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
     desired_columns = {
         "structure": "TEXT DEFAULT 'unknown'",
+        "quantity": "FLOAT DEFAULT 0",
         "remaining_notional_usdt": "FLOAT DEFAULT 0",
+        "remaining_quantity": "FLOAT DEFAULT 0",
         "initial_stop_loss": "FLOAT DEFAULT 0",
         "current_stop_loss": "FLOAT DEFAULT 0",
         "tp1_price": "FLOAT DEFAULT 0",
@@ -63,6 +66,30 @@ def _ensure_sqlite_trade_columns() -> None:
         "fees_paid_usdt": "FLOAT DEFAULT 0",
         "exit_reason": "TEXT",
         "management_plan": "TEXT DEFAULT ''",
+        "primary_strategy_name": "TEXT",
+        "matched_strategy_names": "TEXT DEFAULT ''",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in desired_columns.items():
+            if column_name in existing_columns:
+                continue
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"))
+
+
+def _ensure_sqlite_signal_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    table_name = "signalrecord"
+    inspector = inspect(engine)
+    if table_name not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+    desired_columns = {
+        "primary_strategy_name": "TEXT",
+        "matched_strategy_names": "TEXT DEFAULT ''",
     }
 
     with engine.begin() as connection:

@@ -1,6 +1,6 @@
 from app.config import Settings
 from app.core.signal_engine import SignalEngine
-from app.data.schema import Candidate, MarketSnapshot
+from app.data.schema import Candidate, MarketSnapshot, StrategyMatchDiagnostic
 
 
 def test_signal_engine_generates_signal_for_strong_candidate():
@@ -59,3 +59,39 @@ def test_signal_engine_skips_choppy_late_reversal_candidate():
     signals = SignalEngine(settings=settings).generate_signals([candidate])
 
     assert signals == []
+
+
+def test_signal_engine_carries_primary_strategy_name_into_signal(monkeypatch):
+    settings = Settings(
+        confidence_threshold=0.6,
+        min_rr=1.5,
+        min_volume_usdt=1000,
+        max_open_positions=3,
+    )
+    snapshot = MarketSnapshot(
+        symbol="ETHUSDT",
+        price=2500,
+        price_change_pct_24h=5.5,
+        quote_volume_24h=200_000_000,
+        oi=1000,
+        funding_rate=0.0001,
+        long_short_ratio=1.1,
+        taker_buy_sell_ratio=1.2,
+        btc_trend="up",
+    )
+    candidate = Candidate(snapshot=snapshot, hard_score=85, reasons=["test candidate"])
+    engine = SignalEngine(settings=settings)
+    monkeypatch.setattr(
+        engine,
+        "_apply_kol_cards",
+        lambda candidate, strategy_tier_mode="all": [
+            StrategyMatchDiagnostic(name="derrrrrrq_generic", tier="core", applied_bonus=12.0),
+            StrategyMatchDiagnostic(name="onchainos_smart_money_gate", tier="watchlist", applied_bonus=3.0),
+        ],
+    )
+
+    signals = engine.generate_signals([candidate])
+
+    assert len(signals) == 1
+    assert signals[0].primary_strategy_name == "derrrrrrq_generic"
+    assert signals[0].matched_strategy_names == ["derrrrrrq_generic", "onchainos_smart_money_gate"]

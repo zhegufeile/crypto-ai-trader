@@ -17,8 +17,10 @@ def health(request: Request) -> dict:
         "simulation": settings.use_simulation,
         "market_data_source": settings.market_data_source,
         "signal_strategy_tier_mode": settings.signal_strategy_tier_mode,
+        "scheduler_enabled": settings.scheduler_enabled,
         "scheduler_running": bool(getattr(scheduler, "running", False)),
         "scan_interval_seconds": settings.scan_interval_seconds,
+        "database_url_resolved": settings.database_url,
     }
 
 
@@ -26,6 +28,7 @@ def health(request: Request) -> dict:
 def readiness(request: Request) -> dict:
     settings = get_settings()
     scheduler = getattr(request.app.state, "scheduler", None)
+    scheduler_running = bool(getattr(scheduler, "running", False))
     warnings: list[str] = []
 
     signal_snapshot_exists = _optional_file_exists(settings.onchain_signal_snapshot_file)
@@ -42,10 +45,11 @@ def readiness(request: Request) -> dict:
     if settings.frontend_origins == [] and settings.env == "prod":
         warnings.append("frontend_origins is empty in prod")
 
-    ready = bool(getattr(scheduler, "running", False))
+    ready = bool(scheduler_running or not settings.scheduler_enabled)
     return {
         "status": "ready" if ready else "degraded",
-        "scheduler_running": ready,
+        "scheduler_enabled": settings.scheduler_enabled,
+        "scheduler_running": scheduler_running,
         "database_url": settings.database_url,
         "signal_strategy_tier_mode": settings.signal_strategy_tier_mode,
         "onchain_signal_snapshot_configured": bool(settings.onchain_signal_snapshot_file),

@@ -91,6 +91,8 @@ class TradeSignal(BaseModel):
     structure: StructureType
     reasons: list[str] = Field(default_factory=list)
     management_plan: list[str] = Field(default_factory=list)
+    primary_strategy_name: str | None = None
+    matched_strategy_names: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

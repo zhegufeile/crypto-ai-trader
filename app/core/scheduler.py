@@ -72,7 +72,44 @@ async def run_scan_once(
             snapshot = candidate_map.get(trade.symbol)
             if snapshot is None:
                 continue
-            managed_trade = execution_engine.manage_simulated(trade, snapshot)
+            try:
+                managed_trade = execution_engine.manage_simulated(trade, snapshot)
+            except Exception as exc:
+                if getattr(exc, "context", None) is not None:
+                    logger.warning("trade management failed: %s", exc)
+                else:
+                    logger.exception("trade management failed")
+                failed_trade = getattr(exc, "trade", None)
+                if failed_trade is not None:
+                    trade_repo.update_trade(failed_trade)
+                    _log_fee_delta(before, failed_trade, fee_repo)
+                    for event_type, message in _journal_events_for_trade_transition(before, failed_trade):
+                        journal_repo.log_event(
+                            symbol=failed_trade.symbol,
+                            trade_id=failed_trade.id,
+                            event_type=event_type,
+                            message=message,
+                            details={
+                                "status": failed_trade.status,
+                                "entry_mode": failed_trade.entry_mode,
+                                "realized_pnl_usdt": failed_trade.realized_pnl_usdt,
+                                "exit_reason": failed_trade.exit_reason,
+                            },
+                        )
+                journal_repo.log_event(
+                    symbol=trade.symbol,
+                    trade_id=trade.id,
+                    event_type="trade_manage_failed",
+                    status="error",
+                    message="trade management failed",
+                    details={
+                        "error": str(exc),
+                        "status": trade.status,
+                        "tier_mode": effective_tier_mode,
+                        "error_context": getattr(exc, "context", {}),
+                    },
+                )
+                continue
             trade_repo.update_trade(managed_trade)
             managed_trades.append(managed_trade)
             _log_fee_delta(before, managed_trade, fee_repo)
@@ -95,7 +132,15 @@ async def run_scan_once(
         open_positions = len([trade for trade in active_trades if trade.is_active])
         recent_trade_actions = journal_repo.count_recent_actions(
             settings.trade_action_circuit_window_minutes,
-            event_types=["trade_opened", "trade_closed", "trade_cancelled", "trade_confirmed"],
+            event_types=[
+                "trade_opened",
+                "trade_closed",
+                "trade_cancelled",
+                "trade_confirmed",
+                "trade_force_closed",
+                "trade_execution_failed",
+                "trade_manage_failed",
+            ],
         )
         if recent_trade_actions >= settings.max_trade_actions_in_window or state_changes >= settings.max_trade_state_changes_per_scan:
             journal_repo.log_event(
@@ -138,7 +183,54 @@ async def run_scan_once(
                 active_trades=current_active_trades,
                 recent_closed_trades=recent_closed_trades,
             )
-            trade = execution_engine.execute_simulated(signal, risk_decision)
+            try:
+                trade = execution_engine.execute_simulated(signal, risk_decision)
+            except Exception as exc:
+                if getattr(exc, "context", None) is not None:
+                    logger.warning("trade execution failed: %s", exc)
+                else:
+                    logger.exception("trade execution failed")
+                failed_trade = getattr(exc, "trade", None)
+                if failed_trade is not None:
+                    saved_trade = trade_repo.save_trade(failed_trade)
+                    _log_fee_delta(None, saved_trade, fee_repo)
+                    journal_repo.log_event(
+                        symbol=saved_trade.symbol,
+                        trade_id=saved_trade.id,
+                        event_type="trade_force_closed",
+                        status="warning",
+                        message=saved_trade.exit_reason or "trade was force-closed after execution failure",
+                    details={
+                        "direction": saved_trade.direction,
+                        "structure": saved_trade.structure,
+                        "entry_mode": saved_trade.entry_mode,
+                        "entry": saved_trade.entry,
+                        "quantity": saved_trade.quantity,
+                        "notional_usdt": saved_trade.notional_usdt,
+                        "stop_loss": saved_trade.stop_loss,
+                        "take_profit": saved_trade.take_profit,
+                        "tier_mode": effective_tier_mode,
+                        "execution_mode": "simulation" if settings.use_simulation else "live",
+                        "primary_strategy_name": saved_trade.primary_strategy_name,
+                        "matched_strategy_names": saved_trade.matched_strategy_names,
+                    },
+                )
+                journal_repo.log_event(
+                    symbol=signal.symbol,
+                    trade_id=None,
+                    event_type="trade_execution_failed",
+                    status="error",
+                    message="trade execution failed",
+                    details={
+                        "error": str(exc),
+                        "tier_mode": effective_tier_mode,
+                        "reasons": risk_decision.reasons,
+                        "error_context": getattr(exc, "context", {}),
+                        "primary_strategy_name": signal.primary_strategy_name,
+                        "matched_strategy_names": signal.matched_strategy_names,
+                    },
+                )
+                continue
             if trade:
                 saved_trade = trade_repo.save_trade(trade)
                 trades.append(saved_trade)
@@ -147,15 +239,20 @@ async def run_scan_once(
                     symbol=saved_trade.symbol,
                     trade_id=saved_trade.id,
                     event_type="trade_opened",
-                    message="simulated trade opened",
+                    message="trade opened",
                     details={
                         "direction": saved_trade.direction,
                         "structure": saved_trade.structure,
                         "entry_mode": saved_trade.entry_mode,
                         "entry": saved_trade.entry,
+                        "quantity": saved_trade.quantity,
+                        "notional_usdt": saved_trade.notional_usdt,
                         "stop_loss": saved_trade.stop_loss,
                         "take_profit": saved_trade.take_profit,
                         "tier_mode": effective_tier_mode,
+                        "execution_mode": "simulation" if settings.use_simulation else "live",
+                        "primary_strategy_name": saved_trade.primary_strategy_name,
+                        "matched_strategy_names": saved_trade.matched_strategy_names,
                     },
                 )
             else:

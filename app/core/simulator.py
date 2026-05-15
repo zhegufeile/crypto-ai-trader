@@ -20,7 +20,9 @@ class SimulatedTrade(BaseModel):
     stop_loss: float
     take_profit: float
     notional_usdt: float
+    quantity: float = 0
     remaining_notional_usdt: float
+    remaining_quantity: float = 0
     initial_stop_loss: float
     current_stop_loss: float
     tp1_price: float
@@ -48,6 +50,8 @@ class SimulatedTrade(BaseModel):
     fees_paid_usdt: float = 0
     exit_reason: str | None = None
     management_plan: list[str] = Field(default_factory=list)
+    primary_strategy_name: str | None = None
+    matched_strategy_names: list[str] = Field(default_factory=list)
 
     @property
     def is_active(self) -> bool:
@@ -60,6 +64,8 @@ class Simulator:
 
     def open_trade(self, signal: TradeSignal, notional_usdt: float) -> SimulatedTrade:
         confirmation_required = signal.structure.value in {"breakout", "momentum"}
+        if self.settings.live_force_immediate_entry_for_testing:
+            confirmation_required = False
         entry_mode = "confirm_breakout_hold" if confirmation_required else "market"
         risk_unit = abs(signal.entry - signal.stop_loss)
         tp1_price = self._offset_price(signal.entry, signal.direction.value, risk_unit * 1.0)
@@ -73,7 +79,9 @@ class Simulator:
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
             notional_usdt=notional_usdt,
+            quantity=round(notional_usdt / signal.entry, 8) if signal.entry else 0,
             remaining_notional_usdt=notional_usdt,
+            remaining_quantity=round(notional_usdt / signal.entry, 8) if signal.entry else 0,
             initial_stop_loss=signal.stop_loss,
             current_stop_loss=signal.stop_loss,
             tp1_price=tp1_price,
@@ -88,8 +96,10 @@ class Simulator:
             max_price_seen=signal.entry,
             min_price_seen=signal.entry,
             management_plan=signal.management_plan,
+            primary_strategy_name=signal.primary_strategy_name,
+            matched_strategy_names=signal.matched_strategy_names,
         )
-        if not confirmation_required:
+        if not confirmation_required and self.settings.use_simulation:
             self._charge_fee(trade, notional_usdt)
         return trade
 
@@ -147,7 +157,8 @@ class Simulator:
         if self._entry_confirmation_passed(trade, snapshot):
             trade.status = "open"
             trade.entry_confirmed = True
-            self._charge_fee(trade, trade.notional_usdt)
+            if self.settings.use_simulation:
+                self._charge_fee(trade, trade.notional_usdt)
             trade.unrealized_pnl_usdt = self._pnl_for_fraction(
                 trade.direction,
                 trade.entry,
@@ -223,6 +234,7 @@ class Simulator:
         )
         trade.remaining_size_pct = round(max(0.0, trade.remaining_size_pct - fill_pct), 6)
         trade.remaining_notional_usdt = round(trade.notional_usdt * trade.remaining_size_pct, 6)
+        trade.remaining_quantity = round(trade.quantity * trade.remaining_size_pct, 8)
 
     def _close_trade(self, trade: SimulatedTrade, exit_price: float, reason: str) -> None:
         if trade.remaining_notional_usdt > 0:
@@ -234,6 +246,7 @@ class Simulator:
                 trade.remaining_notional_usdt,
             )
         trade.remaining_notional_usdt = 0
+        trade.remaining_quantity = 0
         trade.remaining_size_pct = 0
         trade.unrealized_pnl_usdt = 0
         trade.pnl_usdt = trade.realized_pnl_usdt
@@ -247,6 +260,7 @@ class Simulator:
         trade.exit_reason = reason
         trade.unrealized_pnl_usdt = 0
         trade.pnl_usdt = 0
+        trade.remaining_quantity = 0
 
     def _charge_fee(self, trade: SimulatedTrade, notional_usdt: float) -> None:
         if notional_usdt <= 0:

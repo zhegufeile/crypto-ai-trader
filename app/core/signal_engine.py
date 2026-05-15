@@ -46,7 +46,7 @@ class SignalEngine:
         for candidate in candidates:
             self._apply_strategy_scores(candidate)
             self._apply_framework_scores(candidate)
-            self._apply_kol_cards(candidate, strategy_tier_mode=strategy_tier_mode)
+            strategy_matches = self._apply_kol_cards(candidate, strategy_tier_mode=strategy_tier_mode)
             analysis = normalize_analysis(self.analyst.analyze(candidate))
             risk = self.risk_manager.evaluate(
                 candidate,
@@ -72,6 +72,8 @@ class SignalEngine:
                     structure=analysis.structure,
                     reasons=analysis.reason + risk.reasons,
                     management_plan=analysis.management_plan,
+                    primary_strategy_name=strategy_matches[0].name if strategy_matches else None,
+                    matched_strategy_names=[match.name for match in strategy_matches],
                 )
             )
         return sorted(signals, key=lambda signal: signal.score, reverse=True)

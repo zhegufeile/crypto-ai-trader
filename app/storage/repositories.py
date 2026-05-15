@@ -31,6 +31,8 @@ class SignalRepository:
             take_profit=signal.take_profit,
             structure=signal.structure.value,
             reasons="\n".join(signal.reasons),
+            primary_strategy_name=signal.primary_strategy_name,
+            matched_strategy_names="\n".join(signal.matched_strategy_names),
             created_at=signal.created_at,
         )
         self.session.add(record)
@@ -104,6 +106,7 @@ class TradeRepository:
     def _to_record_payload(trade: SimulatedTrade) -> dict:
         payload = trade.model_dump()
         payload["management_plan"] = "\n".join(trade.management_plan)
+        payload["matched_strategy_names"] = "\n".join(trade.matched_strategy_names)
         return payload
 
     @staticmethod
@@ -119,6 +122,9 @@ class TradeRepository:
             payload["closed_at"] = TradeRepository._ensure_utc_datetime(payload["closed_at"])
         payload["management_plan"] = [
             item for item in (payload.get("management_plan") or "").splitlines() if item.strip()
+        ]
+        payload["matched_strategy_names"] = [
+            item for item in (payload.get("matched_strategy_names") or "").splitlines() if item.strip()
         ]
         return SimulatedTrade(**payload)
 

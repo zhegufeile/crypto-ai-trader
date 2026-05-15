@@ -162,7 +162,7 @@ async function loadPositions() {
 }
 
 async function loadJournal() {
-  state.journal = await fetchJson("/positions/journal?limit=20");
+  state.journal = await fetchJson("/positions/journal?limit=50");
   renderJournalStats(state.journal);
   renderJournal(state.journal);
   renderOverview();
@@ -229,14 +229,15 @@ function renderEquityChart(points) {
 
 function renderOverview() {
   els.overviewCardCount.textContent = String(state.cards.length);
-  els.overviewLeaderboard.innerHTML = state.leaderboard.length
-    ? state.leaderboard.slice(0, 4).map((item, index) => `
+  const attribution = (state.account?.strategy_attribution || []);
+  els.overviewLeaderboard.innerHTML = attribution.length
+    ? attribution.slice(0, 4).map((item, index) => `
         <div class="mini-item">
-          <strong>#${index + 1} ${escapeHtml(item.name)}</strong>
-          <span>${escapeHtml(item.tier)} | win ${fmtPct(item.historical_win_rate || 0)} | RR ${fmtNum(item.historical_rr || 0)}</span>
+          <strong>#${index + 1} ${escapeHtml(item.strategy_name)}</strong>
+          <span>PnL ${fmtNum(item.total_pnl_usdt)} | win ${fmtPct(item.win_rate || 0)} | closed ${item.closed_trades || 0}</span>
         </div>
       `).join("")
-    : '<div class="empty">No leaderboard data yet.</div>';
+    : '<div class="empty">No strategy attribution yet.</div>';
 
   els.overviewJournal.innerHTML = state.journal.length
     ? state.journal.slice(0, 4).map((item) => `
@@ -248,7 +249,7 @@ function renderOverview() {
     : '<div class="empty">No journal data yet.</div>';
 
   els.equityLog.innerHTML = state.journal.length
-    ? state.journal.slice(0, 6).map((item) => `
+    ? state.journal.slice(0, 20).map((item) => `
         <div class="equity-log-item">
           <strong>${escapeHtml(item.event_type)} · ${escapeHtml(item.symbol)}</strong>
           <span>${fmtTime(item.created_at)} | ${escapeHtml(item.message || "No message")}</span>
@@ -492,6 +493,8 @@ function renderPositions(items) {
       </div>
       <div class="metrics">
         <div class="metric"><span class="metric-label">Entry</span><span class="metric-value">${fmtNum(item.entry, 4)}</span></div>
+        <div class="metric"><span class="metric-label">Notional</span><span class="metric-value">${fmtNum(item.notional_usdt || 0)} USDT</span></div>
+        <div class="metric"><span class="metric-label">Quantity</span><span class="metric-value">${fmtNum(item.quantity || 0, 6)}</span></div>
         <div class="metric"><span class="metric-label">Current Stop</span><span class="metric-value">${fmtNum(item.current_stop_loss, 4)}</span></div>
         <div class="metric"><span class="metric-label">Target</span><span class="metric-value">${fmtNum(item.take_profit, 4)}</span></div>
       </div>
@@ -502,16 +505,18 @@ function renderPositions(items) {
           TP1 / TP2 ${item.tp1_hit ? "hit" : "pending"} / ${item.tp2_hit ? "hit" : "pending"}<br>
           Updated ${fmtTime(item.updated_at)}
         </div>
-        <div class="diagnostic-box">
-          <strong>PnL</strong>
-          <span class="${pnlClass(item.realized_pnl_usdt || 0)}">Realized ${fmtNum(item.realized_pnl_usdt || 0)} USDT</span><br>
-          <span class="${pnlClass(item.unrealized_pnl_usdt || 0)}">Unrealized ${fmtNum(item.unrealized_pnl_usdt || 0)} USDT</span><br>
-          <span class="${pnlClass(item.pnl_usdt || 0)}">Total ${fmtNum(item.pnl_usdt || 0)} USDT</span><br>
-          Exit ${escapeHtml(item.exit_reason || "Still active")}
+          <div class="diagnostic-box">
+            <strong>PnL</strong>
+            <span class="${pnlClass(item.realized_pnl_usdt || 0)}">Realized ${fmtNum(item.realized_pnl_usdt || 0)} USDT</span><br>
+            <span class="${pnlClass(item.unrealized_pnl_usdt || 0)}">Unrealized ${fmtNum(item.unrealized_pnl_usdt || 0)} USDT</span><br>
+            <span class="${pnlClass(item.pnl_usdt || 0)}">Total ${fmtNum(item.pnl_usdt || 0)} USDT</span><br>
+            Exit ${escapeHtml(item.exit_reason || "Still active")}<br>
+            Strategy ${escapeHtml(item.primary_strategy_name || "unattributed")}
+          </div>
         </div>
-      </div>
-      ${(item.management_plan || []).length ? `<ul class="plan-list">${item.management_plan.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>` : ""}
-    </article>
+        ${(item.matched_strategy_names || []).length ? `<div class="detail-block"><strong>Matched Cards</strong><div>${escapeHtml(item.matched_strategy_names.join(" | "))}</div></div>` : ""}
+        ${(item.management_plan || []).length ? `<ul class="plan-list">${item.management_plan.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>` : ""}
+      </article>
   `).join("");
 }
 
@@ -537,7 +542,12 @@ function renderJournal(items) {
     } catch {
       details = {};
     }
-    const detailLines = Object.entries(details).slice(0, 4).map(([key, value]) =>
+    const preferredKeys = ["entry", "quantity", "notional_usdt", "stop_loss", "take_profit", "primary_strategy_name"];
+    const orderedEntries = [
+      ...preferredKeys.filter((key) => key in details).map((key) => [key, details[key]]),
+      ...Object.entries(details).filter(([key]) => !preferredKeys.includes(key)),
+    ];
+    const detailLines = orderedEntries.slice(0, 6).map(([key, value]) =>
       `${escapeHtml(key)}: ${escapeHtml(Array.isArray(value) ? value.join(" | ") : value)}`
     ).join("<br>");
     const badgeClass = item.status === "warning" ? "bad" : item.event_type.includes("closed") || item.event_type.includes("cancelled") ? "warn" : "good";
@@ -556,9 +566,9 @@ function renderJournal(items) {
             ${escapeHtml(item.message || "No message")}
           </div>
           <div class="diagnostic-box">
-            <strong>Details</strong>
-            Trade ID ${escapeHtml(item.trade_id || "-")}<br>
-            ${detailLines || "No extra details"}
+          <strong>Details</strong>
+          Trade ID ${escapeHtml(item.trade_id || "-")}<br>
+          ${detailLines || "No extra details"}
           </div>
         </div>
       </article>

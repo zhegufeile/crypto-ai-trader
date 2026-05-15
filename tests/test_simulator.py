@@ -1,4 +1,5 @@
 from app.core.simulator import Simulator
+from app.config import Settings
 from app.data.schema import Direction, MarketSnapshot, StructureType, TradeSignal
 
 
@@ -21,7 +22,7 @@ def build_signal() -> TradeSignal:
 
 
 def test_simulator_opens_trade_with_confirmation_for_breakout():
-    trade = Simulator().open_trade(build_signal(), 50)
+    trade = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False)).open_trade(build_signal(), 50)
 
     assert trade.symbol == "BTCUSDT"
     assert trade.notional_usdt == 50
@@ -30,8 +31,17 @@ def test_simulator_opens_trade_with_confirmation_for_breakout():
     assert trade.current_stop_loss == 95
 
 
+def test_simulator_can_force_immediate_entry_for_local_live_testing():
+    trade = Simulator(settings=Settings(live_force_immediate_entry_for_testing=True)).open_trade(build_signal(), 50)
+
+    assert trade.status == "open"
+    assert trade.entry_mode == "market"
+    assert trade.entry_confirmed is True
+    assert trade.fees_paid_usdt == 0
+
+
 def test_simulator_confirms_breakout_then_scales_out():
-    simulator = Simulator()
+    simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False))
     trade = simulator.open_trade(build_signal(), 100)
 
     confirmed = simulator.update_trade(
@@ -68,7 +78,7 @@ def test_simulator_confirms_breakout_then_scales_out():
 
 
 def test_simulator_exits_when_security_risk_flips_critical():
-    simulator = Simulator()
+    simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False))
     trade = simulator.open_trade(build_signal(), 100)
     trade.status = "open"
     trade.entry_confirmed = True
@@ -92,7 +102,7 @@ def test_simulator_exits_when_security_risk_flips_critical():
 
 
 def test_simulator_cancels_pending_trade_after_timeout():
-    simulator = Simulator()
+    simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False))
     trade = simulator.open_trade(build_signal(), 100)
     trade.opened_at = trade.opened_at.replace(year=trade.opened_at.year - 1)
 

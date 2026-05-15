@@ -360,6 +360,8 @@ h2 {
 .chart-lower {
   margin-top: 14px;
   flex: 1;
+  min-height: 320px;
+  max-height: 320px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(7, 13, 24, 0.68);
@@ -382,8 +384,9 @@ h2 {
   display: grid;
   gap: 10px;
   flex: 1;
-  min-height: 190px;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
 }
 

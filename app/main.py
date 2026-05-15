@@ -27,10 +27,12 @@ async def lifespan(app: FastAPI):
     init_db()
     settings = get_settings()
     scheduler = build_scheduler(settings)
-    scheduler.start()
+    if settings.scheduler_enabled:
+        scheduler.start()
     app.state.scheduler = scheduler
     yield
-    scheduler.shutdown(wait=False)
+    if getattr(scheduler, "running", False):
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Crypto AI Trader", version="0.1.0", lifespan=lifespan)
