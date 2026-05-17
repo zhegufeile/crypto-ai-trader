@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, datetime, timedelta
 
-from sqlmodel import Session, select
+from sqlmodel import Session, select, update
 
 from app.core.simulator import SimulatedTrade
 from app.data.schema import TradeSignal
@@ -75,9 +75,23 @@ class TradeRepository:
         self.session.refresh(existing)
         return self._to_trade_model(existing)
 
+    def claim_pending_entry(self, trade_id: str) -> SimulatedTrade | None:
+        statement = (
+            update(SimTradeRecord)
+            .where(SimTradeRecord.id == trade_id)
+            .where(SimTradeRecord.status == "pending_entry")
+            .values(status="entry_in_progress", updated_at=datetime.now(UTC))
+        )
+        result = self.session.exec(statement)
+        self.session.commit()
+        if result.rowcount != 1:
+            return None
+        record = self.session.get(SimTradeRecord, trade_id)
+        return self._to_trade_model(record) if record is not None else None
+
     def list_open_trades(self) -> list[SimulatedTrade]:
         statement = select(SimTradeRecord).where(
-            SimTradeRecord.status.in_(["pending_entry", "open", "partial"])
+            SimTradeRecord.status.in_(["pending_entry", "entry_in_progress", "open", "partial"])
         )
         return [self._to_trade_model(record) for record in self.session.exec(statement).all()]
 
@@ -171,6 +185,32 @@ class TradeJournalRepository:
         if event_types:
             statement = statement.where(TradeJournalRecord.event_type.in_(event_types))
         return len(list(self.session.exec(statement).all()))
+
+    def has_recent_symbol_event(
+        self,
+        symbol: str,
+        window_minutes: int,
+        event_types: list[str] | None = None,
+    ) -> bool:
+        cutoff = datetime.now(UTC) - timedelta(minutes=window_minutes)
+        statement = (
+            select(TradeJournalRecord)
+            .where(TradeJournalRecord.created_at >= cutoff)
+            .where(TradeJournalRecord.symbol == symbol)
+        )
+        if event_types:
+            statement = statement.where(TradeJournalRecord.event_type.in_(event_types))
+        return self.session.exec(statement).first() is not None
+
+    def has_trade_event(self, trade_id: str | None, event_type: str) -> bool:
+        if not trade_id:
+            return False
+        statement = (
+            select(TradeJournalRecord)
+            .where(TradeJournalRecord.trade_id == trade_id)
+            .where(TradeJournalRecord.event_type == event_type)
+        )
+        return self.session.exec(statement).first() is not None
 
     def delete_all(self) -> int:
         records = list(self.session.exec(select(TradeJournalRecord)).all())

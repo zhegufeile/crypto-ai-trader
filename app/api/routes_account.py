@@ -6,6 +6,7 @@ from sqlmodel import Session
 from app.config import get_settings
 from app.core.live_trader import BinanceLiveTrader, BinanceLiveTradingError
 from app.core.simulator import ACTIVE_TRADE_STATUSES
+from app.api.routes_positions import _reconcile_live_positions
 from app.storage.db import get_session
 from app.storage.repositories import TradeFeeRepository, TradeRepository
 
@@ -14,12 +15,13 @@ router = APIRouter(prefix="/account", tags=["account"])
 
 @router.get("/summary")
 def get_account_summary(session: Session = Depends(get_session)) -> dict:
+    _reconcile_live_positions(session)
     settings = get_settings()
     trades = TradeRepository(session).list_all_trades(limit=1000)
     fee_repo = TradeFeeRepository(session)
     active = [trade for trade in trades if trade.status in ACTIVE_TRADE_STATUSES]
     closed = [trade for trade in trades if trade.status in {"closed", "cancelled"}]
-    pending = [trade for trade in trades if trade.status == "pending_entry"]
+    pending = [trade for trade in trades if trade.status in {"pending_entry", "entry_in_progress"}]
 
     realized_pnl = round(sum(trade.realized_pnl_usdt for trade in trades), 4)
     unrealized_pnl = round(sum(trade.unrealized_pnl_usdt for trade in active), 4)
@@ -32,23 +34,14 @@ def get_account_summary(session: Session = Depends(get_session)) -> dict:
         try:
             live_trader = BinanceLiveTrader(settings=settings)
             account = live_trader._signed_request("GET", "/fapi/v2/account", {})
-            exchange_positions = [
-                row
-                for row in account.get("positions", [])
-                if abs(float(row.get("positionAmt", 0) or 0)) > 0
-            ]
             equity = round(float(account.get("totalWalletBalance", equity) or equity), 4)
             available_balance = round(float(account.get("availableBalance", available_balance) or available_balance), 4)
             unrealized_pnl = round(float(account.get("totalUnrealizedProfit", unrealized_pnl) or unrealized_pnl), 4)
             capital_in_use = round(max(equity - available_balance, 0), 4)
-            open_position_count = len(exchange_positions)
         except Exception as exc:
             exchange_account_warning = str(exc)
-            open_position_count = len([trade for trade in active if trade.status in {"open", "partial"}])
-        else:
-            open_position_count = len(exchange_positions)
-    else:
-        open_position_count = len([trade for trade in active if trade.status in {"open", "partial"}])
+
+    open_position_count = len([trade for trade in active if trade.status in {"open", "partial"}])
 
     cutoff_24h = datetime.now(UTC) - timedelta(hours=24)
     total_fees = round(fee_repo.sum_all(), 4)
@@ -123,7 +116,8 @@ def _build_equity_curve(*, starting_balance: float, closed_trades: list, current
 def _build_strategy_attribution(trades: list) -> list[dict]:
     summary: dict[str, dict] = {}
     for trade in trades:
-        key = trade.primary_strategy_name or "unattributed"
+        fallback_strategy = next((name for name in (trade.matched_strategy_names or []) if name), None)
+        key = trade.primary_strategy_name or fallback_strategy or "unattributed"
         entry = summary.setdefault(
             key,
             {

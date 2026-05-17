@@ -131,3 +131,46 @@ def test_account_summary_api_returns_live_exchange_balances(monkeypatch):
     assert payload["open_positions"] == 1
     assert payload["exchange_account_warning"] is None
     assert payload["strategy_attribution"][0]["strategy_name"] == "derrrrrrq_generic"
+
+
+def test_account_summary_counts_live_open_positions_from_local_trade_rows(monkeypatch):
+    class MultiLocalTradeRepo(FakeTradeRepo):
+        def list_all_trades(self, limit: int = 1000):
+            trades = super().list_all_trades(limit=limit)
+            trades.insert(
+                1,
+                trades[0].model_copy(update={"id": "open-2", "symbol": "BTCUSDT", "remaining_notional_usdt": 70}),
+            )
+            return trades
+
+    monkeypatch.setattr("app.api.routes_account.TradeRepository", MultiLocalTradeRepo)
+    monkeypatch.setattr("app.api.routes_account.TradeFeeRepository", FakeFeeRepo)
+    monkeypatch.setattr("app.api.routes_account.BinanceLiveTrader", FakeLiveTrader)
+    monkeypatch.setattr("app.api.routes_account.get_settings", lambda: Settings(use_simulation=False, live_trading_enabled=True))
+
+    client = TestClient(app)
+    response = client.get("/account/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["open_positions"] == 2
+
+
+def test_account_summary_uses_matched_strategy_as_fallback_when_primary_is_missing(monkeypatch):
+    class FallbackTradeRepo(FakeTradeRepo):
+        def list_all_trades(self, limit: int = 1000):
+            trades = super().list_all_trades(limit=limit)
+            trades[0].primary_strategy_name = None
+            trades[0].matched_strategy_names = ["onchainos_smart_money_gate", "derrrrrrq_generic"]
+            return trades
+
+    monkeypatch.setattr("app.api.routes_account.TradeRepository", FallbackTradeRepo)
+    monkeypatch.setattr("app.api.routes_account.TradeFeeRepository", FakeFeeRepo)
+    monkeypatch.setattr("app.api.routes_account.get_settings", lambda: Settings(use_simulation=True))
+
+    client = TestClient(app)
+    response = client.get("/account/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert any(item["strategy_name"] == "onchainos_smart_money_gate" for item in payload["strategy_attribution"])

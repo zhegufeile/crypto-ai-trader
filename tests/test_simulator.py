@@ -40,7 +40,7 @@ def test_simulator_can_force_immediate_entry_for_local_live_testing():
     assert trade.fees_paid_usdt == 0
 
 
-def test_simulator_confirms_breakout_then_scales_out():
+def test_simulator_confirms_breakout_then_arms_tp1_profit_lock():
     simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False))
     trade = simulator.open_trade(build_signal(), 100)
 
@@ -59,7 +59,7 @@ def test_simulator_confirms_breakout_then_scales_out():
     assert confirmed.status == "open"
     assert confirmed.entry_confirmed is True
 
-    scaled = simulator.update_trade(
+    locked = simulator.update_trade(
         confirmed,
         MarketSnapshot(
             symbol="BTCUSDT",
@@ -71,10 +71,109 @@ def test_simulator_confirms_breakout_then_scales_out():
             retest_quality_score=0.65,
         ),
     )
-    assert scaled.tp1_hit is True
-    assert scaled.status == "partial"
-    assert scaled.remaining_notional_usdt < scaled.notional_usdt
-    assert scaled.current_stop_loss >= scaled.entry
+    assert locked.tp1_hit is True
+    assert locked.status == "open"
+    assert locked.remaining_notional_usdt == locked.notional_usdt
+    assert locked.current_stop_loss == locked.tp1_price
+
+
+def test_simulator_closes_when_price_retraces_back_to_tp1_lock():
+    simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False))
+    trade = simulator.open_trade(build_signal(), 100)
+    trade.status = "open"
+    trade.entry_confirmed = True
+
+    armed = simulator.update_trade(
+        trade,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=105.2,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=6,
+            btc_trend="up",
+            follow_through_score=0.7,
+            retest_quality_score=0.65,
+        ),
+    )
+    closed = simulator.update_trade(
+        armed,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=105.0,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=5.5,
+            btc_trend="up",
+            follow_through_score=0.55,
+            retest_quality_score=0.6,
+        ),
+    )
+
+    assert closed.status == "closed"
+    assert closed.exit_reason == "take profit lock retraced at tp1"
+    assert closed.remaining_notional_usdt == 0
+
+
+def test_simulator_arms_tp3_and_closes_on_retrace_to_tp3():
+    simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False))
+    trade = simulator.open_trade(build_signal(), 100)
+    trade.status = "open"
+    trade.entry_confirmed = True
+
+    armed_tp1 = simulator.update_trade(
+        trade,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=105.2,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=6,
+            btc_trend="up",
+            follow_through_score=0.7,
+            retest_quality_score=0.65,
+        ),
+    )
+    armed_tp2 = simulator.update_trade(
+        armed_tp1,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=110.3,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=9,
+            btc_trend="up",
+            follow_through_score=0.8,
+            retest_quality_score=0.7,
+        ),
+    )
+    armed_tp3 = simulator.update_trade(
+        armed_tp2,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=112.3,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=11,
+            btc_trend="up",
+            follow_through_score=0.85,
+            retest_quality_score=0.72,
+        ),
+    )
+
+    assert armed_tp3.trail_active is True
+    assert armed_tp3.current_stop_loss == armed_tp3.take_profit
+
+    closed = simulator.update_trade(
+        armed_tp3,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=112.0,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=10.2,
+            btc_trend="up",
+            follow_through_score=0.75,
+            retest_quality_score=0.68,
+        ),
+    )
+
+    assert closed.status == "closed"
+    assert closed.exit_reason == "take profit lock retraced at tp3"
 
 
 def test_simulator_exits_when_security_risk_flips_critical():

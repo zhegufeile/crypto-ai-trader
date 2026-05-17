@@ -1,6 +1,11 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
+from app.config import get_settings
+from app.core.live_trader import BinanceLiveTrader
+from app.core.scheduler import _fallback_snapshot_for_trade, _log_fee_delta, _log_trade_transition_events
 from app.storage.db import get_session
 from app.storage.repositories import SignalRepository, TradeFeeRepository, TradeJournalRepository, TradeRepository
 
@@ -9,6 +14,7 @@ router = APIRouter(prefix="/positions", tags=["positions"])
 
 @router.get("")
 def list_positions(include_closed: bool = False, session: Session = Depends(get_session)) -> list[dict]:
+    _reconcile_live_positions(session)
     repo = TradeRepository(session)
     records = repo.list_all_trades() if include_closed else repo.list_open_trades()
     return [record.model_dump() for record in records]
@@ -43,3 +49,39 @@ def reset_simulation_runtime(
         result["fees_deleted"] = TradeFeeRepository(session).delete_all()
     result["status"] = "ok"
     return result
+
+
+def _reconcile_live_positions(session: Session) -> None:
+    settings = get_settings()
+    if settings.use_simulation or not settings.live_trading_enabled:
+        return
+
+    trade_repo = TradeRepository(session)
+    journal_repo = TradeJournalRepository(session)
+    fee_repo = TradeFeeRepository(session)
+    live_trader = BinanceLiveTrader(settings=settings)
+
+    for trade in trade_repo.list_open_trades():
+        before = trade.model_copy(deep=True)
+        snapshot = _fallback_snapshot_for_trade(trade)
+        snapshot.timestamp = datetime.now(UTC)
+        try:
+            reconciled = live_trader.update_trade(trade, snapshot)
+        except Exception as exc:
+            journal_repo.log_event(
+                symbol=trade.symbol,
+                trade_id=trade.id,
+                event_type="trade_manage_failed",
+                status="error",
+                message="trade management failed during position sync",
+                details={
+                    "error": str(exc),
+                    "status": trade.status,
+                    "error_context": getattr(exc, "context", {}),
+                },
+            )
+            continue
+
+        trade_repo.update_trade(reconciled)
+        _log_fee_delta(before, reconciled, fee_repo)
+        _log_trade_transition_events(journal_repo, before, reconciled)

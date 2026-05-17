@@ -32,7 +32,7 @@ class RiskManager:
             reasons.append("risk/reward is below threshold")
         if open_positions >= self.settings.max_open_positions:
             reasons.append("maximum open positions reached")
-        if any(trade.symbol == symbol for trade in active_trades):
+        if any(trade.symbol == symbol and trade.is_active for trade in active_trades):
             reasons.append("symbol already has an active or pending position")
         if self._count_active_direction(active_trades, analysis.direction.value) >= self.settings.max_same_direction_positions:
             reasons.append("same-direction exposure limit is reached")

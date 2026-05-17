@@ -58,19 +58,25 @@ class BinanceLiveTrader:
         trade.max_price_seen = snapshot.price if trade.max_price_seen is None else max(trade.max_price_seen, snapshot.price)
         trade.min_price_seen = snapshot.price if trade.min_price_seen is None else min(trade.min_price_seen, snapshot.price)
 
-        if trade.status == "pending_entry":
+        if trade.status in {"pending_entry", "entry_in_progress"}:
             return self._update_pending_trade(trade, snapshot)
 
         position = self._get_position_risk(trade.symbol)
         if abs(float(position.get("positionAmt", 0) or 0)) <= 0:
-            trade.remaining_notional_usdt = 0
-            trade.remaining_quantity = 0
-            trade.remaining_size_pct = 0
-            trade.unrealized_pnl_usdt = 0
-            trade.pnl_usdt = trade.realized_pnl_usdt
-            trade.status = "closed"
+            exit_price = trade.current_stop_loss
+            exit_reason = "exchange position already flat"
+            if trade.last_price is not None and self.simulator._stop_triggered(trade, trade.last_price):
+                exit_price = trade.current_stop_loss
+                exit_reason = "exchange hard stop triggered"
+            elif snapshot.price and self.simulator._stop_triggered(trade, snapshot.price):
+                exit_price = trade.current_stop_loss
+                exit_reason = "exchange hard stop triggered"
+            elif trade.last_price:
+                exit_price = trade.last_price
+            elif snapshot.price:
+                exit_price = snapshot.price
+            self._finalize_closed_trade(trade, exit_price, trade.exit_reason or exit_reason)
             trade.closed_at = snapshot.timestamp
-            trade.exit_reason = trade.exit_reason or "exchange position already flat"
             return trade
 
         mark_price = float(position.get("markPrice", snapshot.price) or snapshot.price)
@@ -100,16 +106,8 @@ class BinanceLiveTrader:
 
         if self.simulator._stop_triggered(trade, mark_price):
             self._reduce_only_close(trade.symbol, trade.direction, 1.0)
-            self._finalize_closed_trade(trade, trade.current_stop_loss, "stop loss or trailing stop hit")
+            self._finalize_closed_trade(trade, trade.current_stop_loss, self.simulator._stop_exit_reason(trade))
             return trade
-
-        if self.simulator._final_target_hit(trade, mark_price):
-            self._reduce_only_close(trade.symbol, trade.direction, 1.0)
-            self._finalize_closed_trade(trade, trade.take_profit, "final take profit hit")
-            return trade
-
-        if trade.trail_active:
-            self._update_trailing_stop(trade, mark_price)
 
         return trade
 
@@ -137,22 +135,25 @@ class BinanceLiveTrader:
             return trade
         if self.simulator._entry_confirmation_passed(trade, snapshot):
             return self._enter_live_position(trade)
+        if trade.status == "entry_in_progress":
+            trade.status = "pending_entry"
         return trade
 
     def _enter_live_position(self, trade: SimulatedTrade) -> SimulatedTrade:
         self._assert_live_ready()
         self._assert_symbol_allowed(trade.symbol)
-        self._configure_symbol(trade.symbol)
-        rules = self._get_symbol_rules(trade.symbol)
-        self._assert_account_capacity(trade.notional_usdt)
-
-        current_price = self._get_mark_price(trade.symbol)
-        qty = self._calculate_quantity(trade.symbol, trade.notional_usdt, current_price, rules)
-        trade.quantity = float(qty)
-        trade.remaining_quantity = float(qty)
-        side = "BUY" if trade.direction == "long" else "SELL"
         entry_live = False
         try:
+            self._assert_no_existing_exchange_position(trade.symbol)
+            self._configure_symbol(trade.symbol)
+            rules = self._get_symbol_rules(trade.symbol)
+            self._assert_account_capacity(trade.notional_usdt)
+
+            current_price = self._get_mark_price(trade.symbol)
+            qty = self._calculate_quantity(trade.symbol, trade.notional_usdt, current_price, rules)
+            trade.quantity = float(qty)
+            trade.remaining_quantity = float(qty)
+            side = "BUY" if trade.direction == "long" else "SELL"
             self._signed_request(
                 "POST",
                 "/fapi/v1/order",
@@ -193,32 +194,20 @@ class BinanceLiveTrader:
 
     def _check_take_profit_steps(self, trade: SimulatedTrade, price: float) -> None:
         if not trade.tp1_hit and self.simulator._price_reached(trade.direction, price, trade.tp1_price):
-            self._reduce_only_close(trade.symbol, trade.direction, trade.tp1_size_pct)
-            self.simulator._take_partial_profit(trade, trade.tp1_size_pct, trade.tp1_price)
             trade.tp1_hit = True
             trade.break_even_armed = True
-            trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, trade.entry)
-            trade.status = "partial"
+            trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, trade.tp1_price)
+            trade.status = "open"
 
         if trade.tp1_hit and not trade.tp2_hit and self.simulator._price_reached(trade.direction, price, trade.tp2_price):
-            self._reduce_only_close(trade.symbol, trade.direction, trade.tp2_size_pct)
-            self.simulator._take_partial_profit(trade, trade.tp2_size_pct, trade.tp2_price)
             trade.tp2_hit = True
-            trade.trail_active = True
-            buffered_stop = self.simulator._offset_price(
-                trade.entry,
-                trade.direction,
-                abs(trade.tp1_price - trade.entry) * 0.35,
-            )
-            trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, buffered_stop)
-            trade.status = "partial"
+            trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, trade.tp2_price)
+            trade.status = "open"
 
-    def _update_trailing_stop(self, trade: SimulatedTrade, price: float) -> None:
-        trail_gap = abs(trade.entry - trade.initial_stop_loss) * 0.8
-        if trail_gap <= 0:
-            return
-        candidate_stop = self.simulator._offset_price(price, trade.direction, -trail_gap)
-        trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, candidate_stop)
+        if trade.tp2_hit and not trade.trail_active and self.simulator._price_reached(trade.direction, price, trade.take_profit):
+            trade.trail_active = True
+            trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, trade.take_profit)
+            trade.status = "open"
 
     def _finalize_closed_trade(self, trade: SimulatedTrade, exit_price: float, reason: str) -> None:
         if trade.remaining_notional_usdt > 0:
@@ -300,28 +289,36 @@ class BinanceLiveTrader:
         )
 
     def _ensure_exchange_protection(self, trade: SimulatedTrade) -> None:
-        if self._has_exchange_stop_protection(trade.symbol):
-            return
+        attempts = max(1, self.settings.live_protection_retry_attempts)
         last_error: Exception | None = None
-        try:
-            self._place_exchange_stop(trade, "")
-            time.sleep(self.settings.live_protection_retry_delay_seconds)
-            if self._has_exchange_stop_protection(trade.symbol):
-                return
-        except Exception as exc:
-            last_error = exc
+        for attempt in range(1, attempts + 1):
+            try:
+                if self._has_exchange_stop_protection(trade.symbol):
+                    return
+                self._place_exchange_stop(trade, "")
+                time.sleep(self.settings.live_protection_retry_delay_seconds)
+                if self._has_exchange_stop_protection(trade.symbol):
+                    return
+            except Exception as exc:
+                last_error = exc
 
-        message = "failed to install exchange protection after 1 attempt"
+        context = self._build_protection_diagnostic_snapshot(
+            trade,
+            last_error,
+            attempts=attempts,
+        )
+        if self._snapshot_has_exchange_stop_protection(context):
+            return
+
+        message = f"failed to install exchange protection after {attempts} attempt"
+        if attempts != 1:
+            message += "s"
         if last_error is not None:
             message = f"{message}: {last_error}"
         raise BinanceLiveTradingError(
             message,
             trade=trade,
-            context=self._build_protection_diagnostic_snapshot(
-                trade,
-                last_error,
-                attempts=1,
-            ),
+            context=context,
         )
 
     def _has_exchange_stop_protection(self, symbol: str) -> bool:
@@ -333,6 +330,21 @@ class BinanceLiveTrader:
         ):
             return True
         regular_orders = self._list_open_orders(symbol)
+        return any(
+            order.get("type") == "STOP_MARKET"
+            and str(order.get("reduceOnly", "")).lower() == "true"
+            for order in regular_orders
+        )
+
+    def _snapshot_has_exchange_stop_protection(self, snapshot: dict[str, Any]) -> bool:
+        algo_orders = snapshot.get("open_algo_orders", [])
+        if any(
+            self._algo_order_type(order) == "STOP_MARKET"
+            and str(order.get("closePosition", "")).lower() == "true"
+            for order in algo_orders
+        ):
+            return True
+        regular_orders = snapshot.get("open_orders", [])
         return any(
             order.get("type") == "STOP_MARKET"
             and str(order.get("reduceOnly", "")).lower() == "true"
@@ -453,6 +465,11 @@ class BinanceLiveTrader:
         whitelist = {item.upper() for item in self.settings.live_whitelisted_symbols}
         if whitelist and symbol.upper() not in whitelist:
             raise BinanceLiveTradingError(f"{symbol} is not in the live trading whitelist")
+
+    def _assert_no_existing_exchange_position(self, symbol: str) -> None:
+        position = self._get_position_risk(symbol)
+        if abs(float(position.get("positionAmt", 0) or 0)) > 0:
+            raise BinanceLiveTradingError(f"{symbol} already has an exchange position")
 
     def _assert_account_capacity(self, new_notional_usdt: float) -> None:
         account = self._signed_request("GET", "/fapi/v2/account", {})

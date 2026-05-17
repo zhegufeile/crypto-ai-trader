@@ -39,6 +39,9 @@ class FakeTradeRepo:
         closed = trade.model_copy(update={"id": "closed-1", "status": "closed", "pnl_usdt": 5, "realized_pnl_usdt": 5})
         return [trade, closed]
 
+    def update_trade(self, trade):
+        return trade
+
 
 class FakeJournalRepo:
     def __init__(self, session):
@@ -60,6 +63,9 @@ class FakeJournalRepo:
 
     def delete_all(self):
         return 5
+
+    def has_trade_event(self, trade_id: str | None, event_type: str) -> bool:
+        return False
 
 
 class FakeResetTradeRepo(FakeTradeRepo):
@@ -85,6 +91,7 @@ class FakeResetFeeRepo:
 
 def test_positions_api_supports_include_closed(monkeypatch):
     monkeypatch.setattr("app.api.routes_positions.TradeRepository", FakeTradeRepo)
+    monkeypatch.setattr("app.api.routes_positions._reconcile_live_positions", lambda session: None)
 
     client = TestClient(app)
 
@@ -125,6 +132,22 @@ def test_positions_reset_api_clears_runtime_state(monkeypatch):
     assert payload["positions_deleted"] == 3
     assert payload["journal_deleted"] == 5
     assert payload["fees_deleted"] == 2
+
+
+def test_positions_api_reconciles_live_trades_before_return(monkeypatch):
+    reconciled = []
+
+    def fake_reconcile(session):
+        reconciled.append(True)
+
+    monkeypatch.setattr("app.api.routes_positions.TradeRepository", FakeTradeRepo)
+    monkeypatch.setattr("app.api.routes_positions._reconcile_live_positions", fake_reconcile)
+
+    client = TestClient(app)
+    response = client.get("/positions")
+
+    assert response.status_code == 200
+    assert reconciled == [True]
 
 
 def test_trade_repository_handles_legacy_null_updated_at():

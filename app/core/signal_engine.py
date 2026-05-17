@@ -42,7 +42,7 @@ class SignalEngine:
         active_trades=None,
         recent_closed_trades=None,
     ) -> list[TradeSignal]:
-        signals: list[TradeSignal] = []
+        best_signal_by_symbol: dict[str, TradeSignal] = {}
         for candidate in candidates:
             self._apply_strategy_scores(candidate)
             self._apply_framework_scores(candidate)
@@ -51,7 +51,7 @@ class SignalEngine:
             risk = self.risk_manager.evaluate(
                 candidate,
                 analysis,
-                open_positions=open_positions + len(signals),
+                open_positions=open_positions + len(best_signal_by_symbol),
                 realized_pnl_today=realized_pnl_today,
                 active_trades=active_trades,
                 recent_closed_trades=recent_closed_trades,
@@ -59,24 +59,25 @@ class SignalEngine:
             if not risk.allowed or not analysis.entry or not analysis.stop_loss or not analysis.take_profit:
                 continue
             score = self.scorer.score(candidate, analysis)
-            signals.append(
-                TradeSignal(
-                    symbol=analysis.symbol,
-                    direction=analysis.direction,
-                    confidence=analysis.confidence,
-                    rr=analysis.rr,
-                    score=score,
-                    entry=analysis.entry,
-                    stop_loss=analysis.stop_loss,
-                    take_profit=analysis.take_profit,
-                    structure=analysis.structure,
-                    reasons=analysis.reason + risk.reasons,
-                    management_plan=analysis.management_plan,
-                    primary_strategy_name=strategy_matches[0].name if strategy_matches else None,
-                    matched_strategy_names=[match.name for match in strategy_matches],
-                )
+            signal = TradeSignal(
+                symbol=analysis.symbol,
+                direction=analysis.direction,
+                confidence=analysis.confidence,
+                rr=analysis.rr,
+                score=score,
+                entry=analysis.entry,
+                stop_loss=analysis.stop_loss,
+                take_profit=analysis.take_profit,
+                structure=analysis.structure,
+                reasons=analysis.reason + risk.reasons,
+                management_plan=analysis.management_plan,
+                primary_strategy_name=strategy_matches[0].name if strategy_matches else None,
+                matched_strategy_names=[match.name for match in strategy_matches],
             )
-        return sorted(signals, key=lambda signal: signal.score, reverse=True)
+            existing = best_signal_by_symbol.get(signal.symbol)
+            if existing is None or signal.score > existing.score:
+                best_signal_by_symbol[signal.symbol] = signal
+        return sorted(best_signal_by_symbol.values(), key=lambda signal: signal.score, reverse=True)
 
     def diagnose_candidates(
         self,

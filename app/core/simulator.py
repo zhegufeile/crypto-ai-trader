@@ -7,7 +7,7 @@ from app.config import Settings, get_settings
 from app.data.schema import MarketSnapshot, TradeSignal
 
 
-ACTIVE_TRADE_STATUSES = {"pending_entry", "open", "partial"}
+ACTIVE_TRADE_STATUSES = {"pending_entry", "entry_in_progress", "open", "partial"}
 FINAL_TRADE_STATUSES = {"closed", "cancelled"}
 
 
@@ -113,7 +113,7 @@ class Simulator:
         trade.max_price_seen = price if trade.max_price_seen is None else max(trade.max_price_seen, price)
         trade.min_price_seen = price if trade.min_price_seen is None else min(trade.min_price_seen, price)
 
-        if trade.status == "pending_entry":
+        if trade.status in {"pending_entry", "entry_in_progress"}:
             return self._update_pending_trade(trade, snapshot)
 
         if self._has_security_exit(snapshot):
@@ -125,14 +125,9 @@ class Simulator:
             return trade
 
         self._check_take_profit_steps(trade, price)
-        self._update_trailing_stop(trade, price)
 
         if self._stop_triggered(trade, price):
-            self._close_trade(trade, trade.current_stop_loss, "stop loss or trailing stop hit")
-            return trade
-
-        if self._final_target_hit(trade, price):
-            self._close_trade(trade, trade.take_profit, "final take profit hit")
+            self._close_trade(trade, trade.current_stop_loss, self._stop_exit_reason(trade))
             return trade
 
         trade.unrealized_pnl_usdt = self._pnl_for_fraction(
@@ -170,6 +165,8 @@ class Simulator:
 
         trade.unrealized_pnl_usdt = 0
         trade.pnl_usdt = 0
+        if trade.status == "entry_in_progress":
+            trade.status = "pending_entry"
         return trade
 
     def _entry_confirmation_passed(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> bool:
@@ -193,32 +190,20 @@ class Simulator:
 
     def _check_take_profit_steps(self, trade: SimulatedTrade, price: float) -> None:
         if not trade.tp1_hit and self._price_reached(trade.direction, price, trade.tp1_price):
-            self._take_partial_profit(trade, trade.tp1_size_pct, trade.tp1_price)
             trade.tp1_hit = True
             trade.break_even_armed = True
-            trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, trade.entry)
-            trade.status = "partial"
+            trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, trade.tp1_price)
+            trade.status = "open"
 
         if trade.tp1_hit and not trade.tp2_hit and self._price_reached(trade.direction, price, trade.tp2_price):
-            self._take_partial_profit(trade, trade.tp2_size_pct, trade.tp2_price)
             trade.tp2_hit = True
-            trade.trail_active = True
-            buffered_stop = self._offset_price(
-                trade.entry,
-                trade.direction,
-                abs(trade.tp1_price - trade.entry) * 0.35,
-            )
-            trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, buffered_stop)
-            trade.status = "partial"
+            trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, trade.tp2_price)
+            trade.status = "open"
 
-    def _update_trailing_stop(self, trade: SimulatedTrade, price: float) -> None:
-        if not trade.trail_active:
-            return
-        trail_gap = abs(trade.entry - trade.initial_stop_loss) * 0.8
-        if trail_gap <= 0:
-            return
-        candidate_stop = self._offset_price(price, trade.direction, -trail_gap)
-        trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, candidate_stop)
+        if trade.tp2_hit and not trade.trail_active and self._price_reached(trade.direction, price, trade.take_profit):
+            trade.trail_active = True
+            trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, trade.take_profit)
+            trade.status = "open"
 
     def _take_partial_profit(self, trade: SimulatedTrade, size_pct: float, exit_price: float) -> None:
         if trade.remaining_size_pct <= 0:
@@ -286,6 +271,22 @@ class Simulator:
         if trade.direction == "long":
             return price <= trade.current_stop_loss
         return price >= trade.current_stop_loss
+
+    @staticmethod
+    def _profit_lock_active(trade: SimulatedTrade) -> bool:
+        if trade.direction == "long":
+            return trade.current_stop_loss > trade.entry
+        return trade.current_stop_loss < trade.entry
+
+    def _stop_exit_reason(self, trade: SimulatedTrade) -> str:
+        if self._profit_lock_active(trade):
+            if trade.trail_active:
+                return "take profit lock retraced at tp3"
+            if trade.tp2_hit:
+                return "take profit lock retraced at tp2"
+            if trade.tp1_hit:
+                return "take profit lock retraced at tp1"
+        return "stop loss or trailing stop hit"
 
     @staticmethod
     def _final_target_hit(trade: SimulatedTrade, price: float) -> bool:

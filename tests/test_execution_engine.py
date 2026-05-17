@@ -196,11 +196,64 @@ def test_live_trader_ensure_exchange_protection_retries_before_failing(monkeypat
     try:
         trader._ensure_exchange_protection(trade)
     except Exception as exc:
-        assert "failed to install exchange protection after 1 attempt" in str(exc)
+        assert "failed to install exchange protection after 3 attempts" in str(exc)
     else:
         raise AssertionError("expected protection installation to fail")
 
-    assert attempts["stop"] == 1
+    assert attempts["stop"] == 3
+
+
+def test_live_trader_ensure_exchange_protection_accepts_stop_seen_in_diagnostic_snapshot(monkeypatch):
+    trader = BinanceLiveTrader(
+        settings=Settings(
+            use_simulation=False,
+            live_trading_enabled=True,
+            live_protection_retry_attempts=2,
+            live_protection_retry_delay_seconds=0,
+        )
+    )
+    attempts = {"list": 0, "place": 0}
+
+    def fail_initial_lookup(symbol):
+        attempts["list"] += 1
+        raise RuntimeError("temporary connectivity issue")
+
+    def place_stop(trade, qty):
+        attempts["place"] += 1
+
+    monkeypatch.setattr(trader, "_list_open_algo_orders", fail_initial_lookup)
+    monkeypatch.setattr(trader, "_list_open_orders", lambda symbol: [])
+    monkeypatch.setattr(trader, "_place_exchange_stop", place_stop)
+    monkeypatch.setattr(
+        trader,
+        "_build_protection_diagnostic_snapshot",
+        lambda trade, error, attempts: {
+            "symbol": trade.symbol,
+            "attempts": attempts,
+            "open_orders": [],
+            "open_algo_orders": [{"orderType": "STOP_MARKET", "closePosition": True}],
+        },
+    )
+
+    trade = SimulatedTrade(
+        symbol="BTCUSDT",
+        direction="long",
+        structure="pullback",
+        entry=100000,
+        stop_loss=98000,
+        take_profit=104000,
+        notional_usdt=200,
+        remaining_notional_usdt=200,
+        initial_stop_loss=98000,
+        current_stop_loss=98000,
+        tp1_price=101000,
+        tp2_price=102000,
+    )
+
+    trader._ensure_exchange_protection(trade)
+
+    assert attempts["list"] == 2
+    assert attempts["place"] == 0
 
 
 def test_live_trader_cancel_protection_orders_uses_algo_endpoint(monkeypatch):
@@ -348,6 +401,104 @@ def test_live_trader_pending_trade_syncs_to_open_when_exchange_position_exists(m
     assert ensured["called"] is True
 
 
+def test_live_trader_update_trade_finalizes_when_exchange_position_is_already_flat(monkeypatch):
+    trader = BinanceLiveTrader(settings=Settings(use_simulation=False, live_trading_enabled=True))
+
+    monkeypatch.setattr(
+        trader,
+        "_get_position_risk",
+        lambda symbol: {
+            "positionAmt": "0",
+            "entryPrice": "4.0033",
+            "markPrice": "4.07",
+            "unRealizedProfit": "0",
+        },
+    )
+
+    trade = SimulatedTrade(
+        symbol="LABUSDT",
+        direction="short",
+        structure="momentum",
+        entry=4.0033,
+        stop_loss=4.0611,
+        take_profit=3.8451,
+        notional_usdt=50,
+        remaining_notional_usdt=50,
+        initial_stop_loss=4.0611,
+        current_stop_loss=4.0611,
+        tp1_price=3.95,
+        tp2_price=3.90,
+        status="open",
+        entry_mode="market",
+        entry_confirmed=True,
+        confirmation_required=False,
+        quantity=12,
+        remaining_quantity=12,
+        fees_paid_usdt=0.02,
+        last_price=4.07,
+    )
+    snapshot = MarketSnapshot(symbol="LABUSDT", price=4.08)
+
+    updated = trader.update_trade(trade, snapshot)
+
+    assert updated.status == "closed"
+    assert updated.exit_reason == "exchange hard stop triggered"
+    assert updated.realized_pnl_usdt < 0
+    assert updated.unrealized_pnl_usdt == 0
+    assert updated.pnl_usdt == updated.realized_pnl_usdt
+
+
+def test_live_trader_blocks_new_entry_when_exchange_position_already_exists(monkeypatch):
+    trader = BinanceLiveTrader(
+        settings=Settings(
+            use_simulation=False,
+            live_trading_enabled=True,
+            max_position_notional_usdt=250,
+        )
+    )
+    monkeypatch.setattr(trader, "_assert_live_ready", lambda: None)
+    monkeypatch.setattr(trader, "_assert_symbol_allowed", lambda symbol: None)
+    monkeypatch.setattr(
+        trader,
+        "_get_position_risk",
+        lambda symbol: {
+            "positionAmt": "5",
+            "entryPrice": "42.0",
+            "markPrice": "42.2",
+            "unRealizedProfit": "1.1",
+        },
+    )
+
+    trade = SimulatedTrade(
+        symbol="HYPEUSDT",
+        direction="short",
+        structure="momentum",
+        entry=42.078,
+        stop_loss=42.57,
+        take_profit=40.3053,
+        notional_usdt=50.0,
+        remaining_notional_usdt=50.0,
+        initial_stop_loss=42.57,
+        current_stop_loss=42.57,
+        tp1_price=41.6,
+        tp2_price=40.9,
+        status="open",
+        entry_mode="market",
+        entry_confirmed=True,
+        confirmation_required=False,
+    )
+
+    try:
+        trader._enter_live_position(trade)
+    except BinanceLiveTradingError as exc:
+        assert "already has an exchange position" in str(exc)
+        assert exc.trade is not None
+        assert exc.trade.status == "cancelled"
+        assert exc.trade.exit_reason == "entry order was rejected by exchange"
+    else:
+        raise AssertionError("expected duplicate live position rejection")
+
+
 def test_live_trader_rejected_entry_marks_trade_cancelled(monkeypatch):
     trader = BinanceLiveTrader(
         settings=Settings(
@@ -373,6 +524,16 @@ def test_live_trader_rejected_entry_marks_trade_cancelled(monkeypatch):
     )
     monkeypatch.setattr(trader, "_assert_account_capacity", lambda notional: None)
     monkeypatch.setattr(trader, "_get_mark_price", lambda symbol: 100.0)
+    monkeypatch.setattr(
+        trader,
+        "_get_position_risk",
+        lambda symbol: {
+            "positionAmt": "0",
+            "entryPrice": "0",
+            "markPrice": "100",
+            "unRealizedProfit": "0",
+        },
+    )
 
     def reject_request(method, path, params, tolerate_errors=False):
         raise BinanceLiveTradingError("binance http 400: precision rejected")
@@ -466,16 +627,25 @@ def test_live_trader_preserves_protection_context_when_force_closed(monkeypatch)
     monkeypatch.setattr(trader, "_assert_account_capacity", lambda notional: None)
     monkeypatch.setattr(trader, "_get_mark_price", lambda symbol: 100.0)
     monkeypatch.setattr(trader, "_reduce_only_close", lambda symbol, direction, size_pct: None)
-    monkeypatch.setattr(
-        trader,
-        "_get_position_risk",
-        lambda symbol: {
+    position_calls = {"count": 0}
+
+    def fake_position_risk(symbol):
+        position_calls["count"] += 1
+        if position_calls["count"] == 1:
+            return {
+                "positionAmt": "0",
+                "entryPrice": "0",
+                "markPrice": "100",
+                "unRealizedProfit": "0",
+            }
+        return {
             "positionAmt": "2",
             "entryPrice": "100",
             "markPrice": "100",
             "unRealizedProfit": "0",
-        },
-    )
+        }
+
+    monkeypatch.setattr(trader, "_get_position_risk", fake_position_risk)
 
     def fake_signed_request(method, path, params, tolerate_errors=False):
         if path == "/fapi/v1/order":

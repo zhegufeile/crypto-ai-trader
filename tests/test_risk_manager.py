@@ -195,3 +195,87 @@ def test_risk_manager_blocks_same_direction_and_structure_exposure():
     assert decision.allowed is False
     assert "same-direction exposure limit is reached" in decision.reasons
     assert "same-structure exposure limit is reached" in decision.reasons
+
+
+def test_risk_manager_blocks_same_symbol_active_or_pending_position():
+    settings = Settings(
+        confidence_threshold=0.7,
+        min_rr=1.5,
+        min_volume_usdt=1000,
+        max_open_positions=4,
+        max_same_direction_positions=4,
+        max_same_structure_positions=4,
+    )
+    snapshot = MarketSnapshot(symbol="BTCUSDT", price=100, quote_volume_24h=10_000)
+    candidate = Candidate(snapshot=snapshot, hard_score=80)
+    analysis = AnalysisResult(
+        symbol="BTCUSDT",
+        structure=StructureType.BREAKOUT,
+        direction=Direction.LONG,
+        confidence=0.85,
+        rr=2.3,
+    )
+    active_trades = [
+        SimulatedTrade(
+            symbol="BTCUSDT",
+            direction="long",
+            structure="breakout",
+            entry=100,
+            stop_loss=95,
+            take_profit=110,
+            notional_usdt=100,
+            remaining_notional_usdt=100,
+            initial_stop_loss=95,
+            current_stop_loss=95,
+            tp1_price=105,
+            tp2_price=110,
+            status="open",
+        )
+    ]
+
+    decision = RiskManager(settings).evaluate(candidate, analysis, active_trades=active_trades, open_positions=1)
+
+    assert decision.allowed is False
+    assert "symbol already has an active or pending position" in decision.reasons
+
+
+def test_risk_manager_allows_same_symbol_after_previous_trade_is_closed():
+    settings = Settings(
+        confidence_threshold=0.7,
+        min_rr=1.5,
+        min_volume_usdt=1000,
+        max_open_positions=4,
+        max_same_direction_positions=4,
+        max_same_structure_positions=4,
+    )
+    snapshot = MarketSnapshot(symbol="BTCUSDT", price=100, quote_volume_24h=10_000)
+    candidate = Candidate(snapshot=snapshot, hard_score=80)
+    analysis = AnalysisResult(
+        symbol="BTCUSDT",
+        structure=StructureType.BREAKOUT,
+        direction=Direction.LONG,
+        confidence=0.85,
+        rr=2.3,
+    )
+    active_trades = [
+        SimulatedTrade(
+            symbol="BTCUSDT",
+            direction="long",
+            structure="breakout",
+            entry=100,
+            stop_loss=95,
+            take_profit=110,
+            notional_usdt=100,
+            remaining_notional_usdt=0,
+            initial_stop_loss=95,
+            current_stop_loss=95,
+            tp1_price=105,
+            tp2_price=110,
+            status="closed",
+        )
+    ]
+
+    decision = RiskManager(settings).evaluate(candidate, analysis, active_trades=active_trades, open_positions=0)
+
+    assert decision.allowed is True
+    assert "symbol already has an active or pending position" not in decision.reasons

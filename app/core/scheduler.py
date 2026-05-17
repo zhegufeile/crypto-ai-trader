@@ -9,6 +9,7 @@ from app.core.execution_engine import ExecutionEngine
 from app.core.simulator import SimulatedTrade
 from app.core.signal_engine import SignalEngine
 from app.data.market_collector import MarketCollector
+from app.data.schema import MarketSnapshot
 from app.storage.db import engine
 from app.storage.repositories import SignalRepository, TradeFeeRepository, TradeJournalRepository, TradeRepository
 
@@ -68,10 +69,15 @@ async def run_scan_once(
         state_changes = 0
         open_trades = trade_repo.list_open_trades()
         for trade in open_trades:
+            if trade.status == "pending_entry":
+                claimed_trade = trade_repo.claim_pending_entry(trade.id)
+                if claimed_trade is None:
+                    continue
+                trade = claimed_trade
             before = trade.model_copy(deep=True)
             snapshot = candidate_map.get(trade.symbol)
             if snapshot is None:
-                continue
+                snapshot = _fallback_snapshot_for_trade(trade)
             try:
                 managed_trade = execution_engine.manage_simulated(trade, snapshot)
             except Exception as exc:
@@ -83,19 +89,7 @@ async def run_scan_once(
                 if failed_trade is not None:
                     trade_repo.update_trade(failed_trade)
                     _log_fee_delta(before, failed_trade, fee_repo)
-                    for event_type, message in _journal_events_for_trade_transition(before, failed_trade):
-                        journal_repo.log_event(
-                            symbol=failed_trade.symbol,
-                            trade_id=failed_trade.id,
-                            event_type=event_type,
-                            message=message,
-                            details={
-                                "status": failed_trade.status,
-                                "entry_mode": failed_trade.entry_mode,
-                                "realized_pnl_usdt": failed_trade.realized_pnl_usdt,
-                                "exit_reason": failed_trade.exit_reason,
-                            },
-                        )
+                    _log_trade_transition_events(journal_repo, before, failed_trade)
                 journal_repo.log_event(
                     symbol=trade.symbol,
                     trade_id=trade.id,
@@ -113,19 +107,7 @@ async def run_scan_once(
             trade_repo.update_trade(managed_trade)
             managed_trades.append(managed_trade)
             _log_fee_delta(before, managed_trade, fee_repo)
-            for event_type, message in _journal_events_for_trade_transition(before, managed_trade):
-                journal_repo.log_event(
-                    symbol=managed_trade.symbol,
-                    trade_id=managed_trade.id,
-                    event_type=event_type,
-                    message=message,
-                    details={
-                        "status": managed_trade.status,
-                        "entry_mode": managed_trade.entry_mode,
-                        "realized_pnl_usdt": managed_trade.realized_pnl_usdt,
-                        "exit_reason": managed_trade.exit_reason,
-                    },
-                )
+            for event_type in _log_trade_transition_events(journal_repo, before, managed_trade):
                 state_changes += 1
         active_trades = trade_repo.list_open_trades()
         recent_closed_trades = trade_repo.list_recent_closed_trades()
@@ -172,8 +154,42 @@ async def run_scan_once(
         )
         trades = []
         for signal in signals:
-            signal_repo.save_signal(signal)
             current_active_trades = active_trades + trades
+            if any(trade.symbol == signal.symbol and trade.is_active for trade in current_active_trades):
+                journal_repo.log_event(
+                    symbol=signal.symbol,
+                    trade_id=None,
+                    event_type="trade_blocked",
+                    status="warning",
+                    message="symbol already has an active or pending position",
+                    details={
+                        "reasons": ["symbol already has an active or pending position"],
+                        "tier_mode": effective_tier_mode,
+                        "primary_strategy_name": signal.primary_strategy_name,
+                        "matched_strategy_names": signal.matched_strategy_names,
+                    },
+                )
+                continue
+            if journal_repo.has_recent_symbol_event(
+                signal.symbol,
+                settings.trade_action_circuit_window_minutes,
+                event_types=["trade_force_closed", "trade_execution_failed", "trade_manage_failed"],
+            ):
+                journal_repo.log_event(
+                    symbol=signal.symbol,
+                    trade_id=None,
+                    event_type="trade_blocked",
+                    status="warning",
+                    message="recent symbol activity blocked immediate re-entry",
+                    details={
+                        "reasons": ["symbol had recent execution activity; waiting for cool-off window"],
+                        "tier_mode": effective_tier_mode,
+                        "primary_strategy_name": signal.primary_strategy_name,
+                        "matched_strategy_names": signal.matched_strategy_names,
+                    },
+                )
+                continue
+            signal_repo.save_signal(signal)
             candidate = next(item for item in candidates if item.snapshot.symbol == signal.symbol)
             analysis = signal_engine.analyst.analyze(candidate)
             risk_decision = signal_engine.risk_manager.evaluate(
@@ -280,6 +296,17 @@ async def run_scan_once(
             session.close()
 
 
+def _fallback_snapshot_for_trade(trade: SimulatedTrade) -> MarketSnapshot:
+    reference_price = trade.last_price or trade.entry
+    return MarketSnapshot(
+        symbol=trade.symbol,
+        price=reference_price,
+        quote_volume_24h=0,
+        volume_24h=0,
+        source="live_trade_fallback",
+    )
+
+
 def build_scheduler(settings: Settings | None = None) -> AsyncIOScheduler:
     settings = settings or get_settings()
     scheduler = AsyncIOScheduler()
@@ -297,7 +324,7 @@ def build_scheduler(settings: Settings | None = None) -> AsyncIOScheduler:
 
 def _journal_events_for_trade_transition(before: SimulatedTrade, after: SimulatedTrade) -> list[tuple[str, str]]:
     events: list[tuple[str, str]] = []
-    if before.status == "pending_entry" and after.status == "open" and after.entry_confirmed:
+    if before.status in {"pending_entry", "entry_in_progress"} and after.status == "open" and after.entry_confirmed:
         events.append(("trade_confirmed", "pending entry confirmed and trade is now live"))
     if not before.tp1_hit and after.tp1_hit:
         events.append(("trade_tp1_hit", "first take-profit step was hit"))
@@ -308,6 +335,31 @@ def _journal_events_for_trade_transition(before: SimulatedTrade, after: Simulate
     if before.status != after.status and after.status == "cancelled":
         events.append(("trade_cancelled", after.exit_reason or "trade cancelled"))
     return events
+
+
+def _log_trade_transition_events(
+    journal_repo: TradeJournalRepository,
+    before: SimulatedTrade,
+    after: SimulatedTrade,
+) -> list[str]:
+    logged_events: list[str] = []
+    for event_type, message in _journal_events_for_trade_transition(before, after):
+        if event_type == "trade_confirmed" and journal_repo.has_trade_event(after.id, event_type):
+            continue
+        journal_repo.log_event(
+            symbol=after.symbol,
+            trade_id=after.id,
+            event_type=event_type,
+            message=message,
+            details={
+                "status": after.status,
+                "entry_mode": after.entry_mode,
+                "realized_pnl_usdt": after.realized_pnl_usdt,
+                "exit_reason": after.exit_reason,
+            },
+        )
+        logged_events.append(event_type)
+    return logged_events
 
 
 def _log_fee_delta(before: SimulatedTrade | None, after: SimulatedTrade, fee_repo: TradeFeeRepository) -> None:
@@ -326,7 +378,7 @@ def _log_fee_delta(before: SimulatedTrade | None, after: SimulatedTrade, fee_rep
 def _fee_event_type(before: SimulatedTrade | None, after: SimulatedTrade) -> str:
     if before is None:
         return "entry_fee"
-    if before.status == "pending_entry" and after.status == "open":
+    if before.status in {"pending_entry", "entry_in_progress"} and after.status == "open":
         return "entry_fee"
     if not before.tp1_hit and after.tp1_hit:
         return "tp1_exit_fee"
