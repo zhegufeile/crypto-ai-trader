@@ -99,6 +99,14 @@ function pnlClass(value) {
   return "pnl-flat";
 }
 
+function strategyDisplayName(item) {
+  if (item?.primary_strategy_name) return item.primary_strategy_name;
+  if (Array.isArray(item?.matched_strategy_names) && item.matched_strategy_names.length) {
+    return item.matched_strategy_names[0];
+  }
+  return "unattributed";
+}
+
 function badgeClassByTier(tier) {
   if (tier === "core") return "good";
   if (tier === "candidate") return "warn";
@@ -198,15 +206,32 @@ function renderEquityChart(points) {
   const values = points.map((point) => Number(point.equity || 0));
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const spread = Math.max(max - min, 1);
+  const rawSpread = max - min;
+  const padding = rawSpread <= 0 ? Math.max(Math.abs(max) * 0.02, 1) : Math.max(rawSpread * 0.2, 1);
+  const chartMin = min - padding;
+  const chartMax = max + padding;
+  const spread = Math.max(chartMax - chartMin, 1);
   const width = 760;
   const height = 240;
+  const chartPoints = points.length === 1
+    ? [
+        { ...points[0], x: width * 0.08 },
+        { ...points[0], x: width * 0.92 },
+      ]
+    : points.map((point, index) => ({
+        ...point,
+        x: (index / Math.max(points.length - 1, 1)) * width,
+      }));
   const path = points.map((point, index) => {
     const x = (index / Math.max(points.length - 1, 1)) * width;
-    const y = height - ((Number(point.equity || 0) - min) / spread) * height;
+    const y = height - ((Number(point.equity || 0) - chartMin) / spread) * height;
     return `${x},${y}`;
   }).join(" ");
   const latest = points[points.length - 1];
+  const linePoints = chartPoints.map((point) => {
+    const y = height - ((Number(point.equity || 0) - chartMin) / spread) * height;
+    return `${point.x},${y}`;
+  }).join(" ");
 
   els.equityChart.innerHTML = `
     <div>
@@ -218,8 +243,9 @@ function renderEquityChart(points) {
               <stop offset="100%" stop-color="rgba(121,168,255,0.02)"></stop>
             </linearGradient>
           </defs>
-          <polyline fill="none" stroke="#7cf2d2" stroke-width="3" points="${path}"></polyline>
+          <polyline fill="none" stroke="#7cf2d2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${linePoints}"></polyline>
           <polygon fill="url(#equityFill)" points="0,${height} ${path} ${width},${height}"></polygon>
+          <circle cx="${chartPoints[chartPoints.length - 1].x}" cy="${height - ((Number(latest.equity || 0) - chartMin) / spread) * height}" r="4" fill="#7cf2d2"></circle>
         </svg>
       </div>
       <div class="chart-caption">Latest equity ${fmtNum(latest.equity)} at ${fmtTime(latest.time)}</div>
@@ -510,8 +536,11 @@ function renderPositions(items) {
             <span class="${pnlClass(item.realized_pnl_usdt || 0)}">Realized ${fmtNum(item.realized_pnl_usdt || 0)} USDT</span><br>
             <span class="${pnlClass(item.unrealized_pnl_usdt || 0)}">Unrealized ${fmtNum(item.unrealized_pnl_usdt || 0)} USDT</span><br>
             <span class="${pnlClass(item.pnl_usdt || 0)}">Total ${fmtNum(item.pnl_usdt || 0)} USDT</span><br>
+            Side ${escapeHtml(item.direction || "-")}<br>
+            Amount ${fmtNum(item.notional_usdt || 0)} USDT<br>
+            Quantity ${fmtNum(item.quantity || 0, 6)}<br>
             Exit ${escapeHtml(item.exit_reason || "Still active")}<br>
-            Strategy ${escapeHtml(item.primary_strategy_name || "unattributed")}
+            Strategy ${escapeHtml(strategyDisplayName(item))}
           </div>
         </div>
         ${(item.matched_strategy_names || []).length ? `<div class="detail-block"><strong>Matched Cards</strong><div>${escapeHtml(item.matched_strategy_names.join(" | "))}</div></div>` : ""}
@@ -542,7 +571,16 @@ function renderJournal(items) {
     } catch {
       details = {};
     }
-    const preferredKeys = ["entry", "quantity", "notional_usdt", "stop_loss", "take_profit", "primary_strategy_name"];
+    const preferredKeys = [
+      "direction",
+      "entry",
+      "quantity",
+      "notional_usdt",
+      "stop_loss",
+      "take_profit",
+      "primary_strategy_name",
+      "matched_strategy_names",
+    ];
     const orderedEntries = [
       ...preferredKeys.filter((key) => key in details).map((key) => [key, details[key]]),
       ...Object.entries(details).filter(([key]) => !preferredKeys.includes(key)),
@@ -550,6 +588,7 @@ function renderJournal(items) {
     const detailLines = orderedEntries.slice(0, 6).map(([key, value]) =>
       `${escapeHtml(key)}: ${escapeHtml(Array.isArray(value) ? value.join(" | ") : value)}`
     ).join("<br>");
+    const strategyName = details.primary_strategy_name || (Array.isArray(details.matched_strategy_names) && details.matched_strategy_names[0]) || "unattributed";
     const badgeClass = item.status === "warning" ? "bad" : item.event_type.includes("closed") || item.event_type.includes("cancelled") ? "warn" : "good";
     return `
       <article class="card">
@@ -568,6 +607,10 @@ function renderJournal(items) {
           <div class="diagnostic-box">
           <strong>Details</strong>
           Trade ID ${escapeHtml(item.trade_id || "-")}<br>
+          Direction ${escapeHtml(details.direction || "-")}<br>
+          Amount ${fmtNum(details.notional_usdt || 0)} USDT<br>
+          Quantity ${fmtNum(details.quantity || 0, 6)}<br>
+          Strategy ${escapeHtml(strategyName)}<br>
           ${detailLines || "No extra details"}
           </div>
         </div>
