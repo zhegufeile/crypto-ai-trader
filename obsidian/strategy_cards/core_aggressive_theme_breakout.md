@@ -1,0 +1,22 @@
+# core_aggressive_theme_breakout
+
+- description: Aggressive core card for strong relative-strength coins during narrative acceleration. It favors clean momentum, sector/theme leadership, and fast follow-through, while still requiring liquidity and basic risk gates from the system.
+- market: any
+- timeframe: intraday
+- creator: manual_consolidation
+- confidence_bias: 0.18
+- preferred_symbols: none
+- avoided_symbols: none
+- preferred_market_states: trend_or_acceleration
+- entry_conditions: breakout, volume_expansion, relative_strength_leader, narrative_velocity
+- exit_conditions: stop_loss_hit, take_profit_lock_retrace, failed_follow_through, narrative_fades
+- invalidation_conditions: btc_turns_against_setup, funding_overheats, liquidity_deteriorates, security_flags_triggered
+- risk_notes: Use for coins already showing leadership rather than random low-liquidity pumps, Allow entries when momentum is clean and avoid adding extra gates that prevent all trades, If follow-through disappears before TP1 then exit instead of averaging down
+- historical_win_rate: unknown
+- historical_rr: unknown
+- sample_size: 0
+- strategy_tier: core
+- tier_score: 74.0
+- tier_rationale: keeps the highest-conviction momentum components from prior KOL and social cards | uses relative strength and trend regime as the main quality filters | still leaves enough room for trades during genuine theme acceleration
+- tags: core, aggressive, theme, breakout, momentum, relative-strength
+- source_posts: 0

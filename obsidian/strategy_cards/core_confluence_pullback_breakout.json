@@ -1,0 +1,57 @@
+{
+  "name": "core_confluence_pullback_breakout",
+  "description": "Balanced core card for higher-quality pullback or breakout execution after confluence is present. It blends relative strength, retest quality, onchain/social confirmation, and first clean reversal logic without making the gate too restrictive.",
+  "market": "any",
+  "timeframe": "intraday",
+  "creator": "manual_consolidation",
+  "confidence_bias": 0.14,
+  "preferred_symbols": [],
+  "avoided_symbols": [],
+  "preferred_market_states": [
+    "uptrend_pullback"
+  ],
+  "entry_conditions": [
+    "pullback_confirmation",
+    "breakout",
+    "relative_strength_leader",
+    "multi_source_confluence"
+  ],
+  "exit_conditions": [
+    "stop_loss_hit",
+    "take_profit_lock_retrace",
+    "support_lost",
+    "leader_loses_relative_strength"
+  ],
+  "invalidation_conditions": [
+    "failed_follow_through_after_retest",
+    "btc_turns_against_setup",
+    "liquidity_deteriorates",
+    "risk_level_critical",
+    "sector_rotation_fades"
+  ],
+  "risk_notes": [
+    "Prefer the first clean retest or reclaim after strength appears.",
+    "This is a confluence gate, not a no-trade gate; require enough alignment, but do not demand every signal source to fire.",
+    "Avoid late repeated retests after the first clean opportunity has already failed."
+  ],
+  "historical_win_rate": null,
+  "historical_rr": null,
+  "sample_size": 0,
+  "tags": [
+    "core",
+    "balanced",
+    "confluence",
+    "pullback",
+    "breakout",
+    "retest",
+    "relative-strength"
+  ],
+  "source_posts": 0,
+  "strategy_tier": "core",
+  "tier_score": 68.0,
+  "tier_rationale": [
+    "merges the prior smart-money, social, first-reversal, and relative-strength cards",
+    "penalizes weak follow-through after retest but avoids excessive hard filtering",
+    "designed to improve quality while preserving enough trade frequency"
+  ]
+}
