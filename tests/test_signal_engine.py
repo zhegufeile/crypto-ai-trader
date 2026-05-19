@@ -132,14 +132,14 @@ def test_signal_engine_keeps_only_best_signal_per_symbol(monkeypatch):
         Candidate(snapshot=snapshot_weaker, hard_score=80, reasons=["weaker candidate"]),
     ]
     engine = SignalEngine(settings=settings)
-    scores = iter([2.0, 1.0])
+    scores = iter([82.0, 81.0])
     monkeypatch.setattr(engine.scorer, "score", lambda candidate, analysis: next(scores))
 
     signals = engine.generate_signals(candidates)
 
     assert len(signals) == 1
     assert signals[0].symbol == "SUIUSDT"
-    assert signals[0].score == 2.0
+    assert signals[0].score == 80.0
 
 
 def test_signal_engine_skips_symbol_with_active_trade():
@@ -184,3 +184,68 @@ def test_signal_engine_skips_symbol_with_active_trade():
     )
 
     assert signals == []
+
+
+def test_signal_engine_prioritizes_confluence_core_card(monkeypatch):
+    settings = Settings(
+        confidence_threshold=0.6,
+        min_rr=1.5,
+        min_volume_usdt=1000,
+        max_open_positions=4,
+    )
+    confluence_candidate = Candidate(
+        snapshot=MarketSnapshot(
+            symbol="ETHUSDT",
+            price=2500,
+            price_change_pct_24h=3.5,
+            quote_volume_24h=200_000_000,
+            oi=1000,
+            funding_rate=0.0001,
+            long_short_ratio=1.1,
+            taker_buy_sell_ratio=1.2,
+            btc_trend="up",
+            market_regime="uptrend_pullback",
+            relative_strength_score=0.7,
+            retest_quality_score=0.7,
+            follow_through_score=0.6,
+        ),
+        hard_score=80,
+    )
+    aggressive_candidate = Candidate(
+        snapshot=MarketSnapshot(
+            symbol="SOLUSDT",
+            price=150,
+            price_change_pct_24h=7.0,
+            quote_volume_24h=220_000_000,
+            oi=1200,
+            funding_rate=0.0001,
+            long_short_ratio=1.15,
+            taker_buy_sell_ratio=1.25,
+            btc_trend="up",
+            market_regime="trend_or_acceleration",
+            relative_strength_score=0.75,
+            retest_quality_score=0.62,
+            follow_through_score=0.7,
+        ),
+        hard_score=90,
+    )
+    engine = SignalEngine(settings=settings)
+
+    def fake_strategy_matches(candidate, strategy_tier_mode="all"):
+        if candidate.snapshot.symbol == "ETHUSDT":
+            return [StrategyMatchDiagnostic(name="core_confluence_pullback_breakout", tier="core", applied_bonus=9.0)]
+        return [StrategyMatchDiagnostic(name="core_aggressive_theme_breakout", tier="core", applied_bonus=10.0)]
+
+    monkeypatch.setattr(engine, "_apply_kol_cards", fake_strategy_matches)
+    monkeypatch.setattr(
+        engine.scorer,
+        "score",
+        lambda candidate, analysis: 80.0 if candidate.snapshot.symbol == "ETHUSDT" else 95.0,
+    )
+
+    signals = engine.generate_signals([confluence_candidate, aggressive_candidate])
+
+    assert [signal.symbol for signal in signals] == ["ETHUSDT", "SOLUSDT"]
+    assert signals[0].primary_strategy_name == "core_confluence_pullback_breakout"
+    assert signals[0].score == 100.0
+    assert signals[1].score == 93.0

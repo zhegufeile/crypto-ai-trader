@@ -1,6 +1,7 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import text
 from sqlmodel import Session, select, update
 
 from app.core.simulator import SimulatedTrade
@@ -63,6 +64,30 @@ class TradeRepository:
         self.session.commit()
         self.session.refresh(record)
         return self._to_trade_model(record)
+
+    def try_save_active_trade(self, trade: SimulatedTrade) -> SimulatedTrade | None:
+        """Atomically reserve a symbol before any live exchange order is sent."""
+        self.session.commit()
+        if self.session.bind is not None and self.session.bind.dialect.name == "sqlite":
+            self.session.exec(text("BEGIN IMMEDIATE"))
+        try:
+            existing = self.session.exec(
+                select(SimTradeRecord)
+                .where(SimTradeRecord.symbol == trade.symbol)
+                .where(SimTradeRecord.status.in_(["pending_entry", "entry_in_progress", "open", "partial"]))
+                .limit(1)
+            ).first()
+            if existing is not None:
+                self.session.rollback()
+                return None
+            record = SimTradeRecord(**self._to_record_payload(trade))
+            self.session.add(record)
+            self.session.commit()
+            self.session.refresh(record)
+            return self._to_trade_model(record)
+        except Exception:
+            self.session.rollback()
+            raise
 
     def update_trade(self, trade: SimulatedTrade) -> SimulatedTrade:
         existing = self.session.get(SimTradeRecord, trade.id)

@@ -448,7 +448,7 @@ function renderDiagnostics(items) {
         <div class="card-top">
           <div>
             <p class="name">${escapeHtml(item.symbol)}</p>
-            <div class="meta">Structure ${escapeHtml(item.analysis?.structure || "unknown")} | Direction ${escapeHtml(item.analysis?.direction || "neutral")} | Score ${fmtNum(item.hard_score)}</div>
+            <div class="meta">Structure ${escapeHtml(item.analysis?.structure || "unknown")} | Direction ${escapeHtml(item.analysis?.direction || "neutral")} | Score ${fmtNum(signal?.score ?? item.hard_score)} | Hard ${fmtNum(item.hard_score)}</div>
           </div>
           <span class="badge ${badgeClassByTradeable(item)}">${item.tradeable ? "Tradeable" : (snapshot.onchain_honeypot ? "Blocked" : "Rejected")}</span>
         </div>

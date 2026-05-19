@@ -45,6 +45,12 @@ class BinanceLiveTrader:
 
     def open_trade(self, signal: TradeSignal, notional_usdt: float) -> SimulatedTrade:
         trade = self.simulator.open_trade(signal, notional_usdt)
+        return self.enter_prepared_trade(trade)
+
+    def prepare_trade(self, signal: TradeSignal, notional_usdt: float) -> SimulatedTrade:
+        return self.simulator.open_trade(signal, notional_usdt)
+
+    def enter_prepared_trade(self, trade: SimulatedTrade) -> SimulatedTrade:
         if trade.status == "pending_entry":
             return trade
         return self._enter_live_position(trade)

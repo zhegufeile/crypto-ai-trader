@@ -199,8 +199,36 @@ async def run_scan_once(
                 active_trades=current_active_trades,
                 recent_closed_trades=recent_closed_trades,
             )
+            claimed_trade = None
             try:
-                trade = execution_engine.execute_simulated(signal, risk_decision)
+                if settings.use_simulation or not hasattr(execution_engine, "prepare_trade"):
+                    trade = execution_engine.execute_simulated(signal, risk_decision)
+                else:
+                    trade_plan = execution_engine.prepare_trade(signal, risk_decision)
+                    if trade_plan is None:
+                        trade = None
+                    else:
+                        if trade_plan.status == "open":
+                            trade_plan.status = "entry_in_progress"
+                            trade_plan.entry_confirmed = False
+                        claimed_trade = trade_repo.try_save_active_trade(trade_plan)
+                        if claimed_trade is None:
+                            journal_repo.log_event(
+                                symbol=signal.symbol,
+                                trade_id=None,
+                                event_type="trade_blocked",
+                                status="warning",
+                                message="symbol already has an active or pending position",
+                                details={
+                                    "reasons": ["symbol already has an active or pending position"],
+                                    "tier_mode": effective_tier_mode,
+                                    "primary_strategy_name": signal.primary_strategy_name,
+                                    "matched_strategy_names": signal.matched_strategy_names,
+                                    "blocked_stage": "pre_exchange_symbol_claim",
+                                },
+                            )
+                            continue
+                        trade = execution_engine.execute_prepared_trade(claimed_trade)
             except Exception as exc:
                 if getattr(exc, "context", None) is not None:
                     logger.warning("trade execution failed: %s", exc)
@@ -208,7 +236,7 @@ async def run_scan_once(
                     logger.exception("trade execution failed")
                 failed_trade = getattr(exc, "trade", None)
                 if failed_trade is not None:
-                    saved_trade = trade_repo.save_trade(failed_trade)
+                    saved_trade = trade_repo.update_trade(failed_trade) if claimed_trade is not None else trade_repo.save_trade(failed_trade)
                     _log_fee_delta(None, saved_trade, fee_repo)
                     journal_repo.log_event(
                         symbol=saved_trade.symbol,
@@ -248,7 +276,7 @@ async def run_scan_once(
                 )
                 continue
             if trade:
-                saved_trade = trade_repo.save_trade(trade)
+                saved_trade = trade_repo.save_trade(trade) if settings.use_simulation else trade_repo.update_trade(trade)
                 trades.append(saved_trade)
                 _log_fee_delta(None, saved_trade, fee_repo)
                 journal_repo.log_event(

@@ -15,9 +15,22 @@ class ExecutionEngine:
     ) -> SimulatedTrade | None:
         if not risk_decision.allowed:
             return None
+        trade = self.prepare_trade(signal, risk_decision)
+        if trade is None:
+            return None
+        return self.execute_prepared_trade(trade)
+
+    def prepare_trade(self, signal: TradeSignal, risk_decision: RiskDecision) -> SimulatedTrade | None:
+        if not risk_decision.allowed:
+            return None
         if not self.settings.use_simulation:
-            return self.live_trader.open_trade(signal, risk_decision.position_notional_usdt)
+            return self.live_trader.prepare_trade(signal, risk_decision.position_notional_usdt)
         return self.simulator.open_trade(signal, risk_decision.position_notional_usdt)
+
+    def execute_prepared_trade(self, trade: SimulatedTrade) -> SimulatedTrade:
+        if not self.settings.use_simulation:
+            return self.live_trader.enter_prepared_trade(trade)
+        return trade
 
     def manage_simulated(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> SimulatedTrade:
         if not self.settings.use_simulation:

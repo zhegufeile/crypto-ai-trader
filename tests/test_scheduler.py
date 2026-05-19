@@ -38,6 +38,9 @@ class FakeTradeRepo:
     def save_trade(self, trade):
         return trade
 
+    def try_save_active_trade(self, trade):
+        return self.save_trade(trade)
+
     def update_trade(self, trade):
         return trade
 
@@ -343,6 +346,68 @@ class OpeningExecutionEngine:
         )
 
 
+class LiveClaimTradeRepo(FakeTradeRepo):
+    def __init__(self, session):
+        super().__init__(session)
+        self.trades = []
+
+    def list_open_trades(self):
+        return [trade for trade in self.trades if trade.is_active]
+
+    def try_save_active_trade(self, trade):
+        if any(existing.symbol == trade.symbol and existing.is_active for existing in self.trades):
+            return None
+        self.trades.append(trade)
+        return trade
+
+    def update_trade(self, trade):
+        self.trades = [trade if existing.id == trade.id else existing for existing in self.trades]
+        if not any(existing.id == trade.id for existing in self.trades):
+            self.trades.append(trade)
+        return trade
+
+
+class DenyingLiveClaimTradeRepo(LiveClaimTradeRepo):
+    def list_open_trades(self):
+        return []
+
+    def try_save_active_trade(self, trade):
+        return None
+
+
+class LivePreparingExecutionEngine(OpeningExecutionEngine):
+    def __init__(self, settings=None):
+        super().__init__(settings=settings)
+        self.prepared_symbols = []
+
+    def prepare_trade(self, signal, risk_decision):
+        self.prepared_symbols.append(signal.symbol)
+        return SimulatedTrade(
+            symbol=signal.symbol,
+            direction=signal.direction.value,
+            structure=signal.structure.value,
+            entry=signal.entry,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
+            notional_usdt=risk_decision.position_notional_usdt,
+            remaining_notional_usdt=risk_decision.position_notional_usdt,
+            initial_stop_loss=signal.stop_loss,
+            current_stop_loss=signal.stop_loss,
+            tp1_price=signal.entry * 1.01,
+            tp2_price=signal.entry * 1.02,
+            status="open",
+            quantity=1,
+            remaining_quantity=1,
+            entry_mode="market",
+            entry_confirmed=True,
+            confirmation_required=False,
+        )
+
+    def execute_prepared_trade(self, trade):
+        self.executed_symbols.append(trade.symbol)
+        return trade.model_copy(update={"status": "open", "entry_confirmed": True})
+
+
 @pytest.mark.asyncio
 async def test_run_scan_once_logs_trade_execution_failures(monkeypatch):
     journal_repo = NonBlockingJournalRepo(session=object())
@@ -544,6 +609,30 @@ async def test_run_scan_once_blocks_duplicate_symbol_within_same_execution_set(m
     blocked = [event for event in journal_repo.events if event["event_type"] == "trade_blocked"]
     assert blocked
     assert blocked[-1]["details"]["reasons"] == ["symbol already has an active or pending position"]
+
+
+@pytest.mark.asyncio
+async def test_run_scan_once_claims_live_symbol_before_exchange_execution(monkeypatch):
+    journal_repo = NonBlockingJournalRepo(session=object())
+    execution_engine = LivePreparingExecutionEngine()
+    trade_repo = DenyingLiveClaimTradeRepo(session=object())
+
+    monkeypatch.setattr("app.core.scheduler.MarketCollector", lambda settings=None: FakeCollectorWithCandidate())
+    monkeypatch.setattr("app.core.scheduler.SignalRepository", FakeSignalRepo)
+    monkeypatch.setattr("app.core.scheduler.TradeRepository", lambda session: trade_repo)
+    monkeypatch.setattr("app.core.scheduler.TradeJournalRepository", lambda session: journal_repo)
+    monkeypatch.setattr("app.core.scheduler.TradeFeeRepository", FakeFeeRepo)
+    monkeypatch.setattr("app.core.scheduler.SignalEngine", FakeSignalEngineWithSignal)
+    monkeypatch.setattr("app.core.scheduler.ExecutionEngine", lambda settings=None: execution_engine)
+
+    result = await run_scan_once(session=object(), settings=Settings(use_simulation=False, live_trading_enabled=True))
+
+    assert result["signals"] == 1
+    assert result["simulated_trades"] == 0
+    assert execution_engine.prepared_symbols == ["BTCUSDT"]
+    assert execution_engine.executed_symbols == []
+    blocked = [event for event in journal_repo.events if event["event_type"] == "trade_blocked"]
+    assert blocked[-1]["details"]["blocked_stage"] == "pre_exchange_symbol_claim"
 
 
 @pytest.mark.asyncio

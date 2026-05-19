@@ -75,6 +75,7 @@ def test_signal_engine_applies_kol_card_bonus(tmp_path: Path):
             oi=1000,
             funding_rate=0.0001,
             btc_trend="up",
+            market_regime="trend_or_acceleration",
         ),
         hard_score=40,
     )
@@ -119,6 +120,7 @@ def test_signal_engine_prioritizes_core_cards_over_watchlist(tmp_path: Path):
             oi=1000,
             funding_rate=0.0001,
             btc_trend="up",
+            market_regime="trend_or_acceleration",
         ),
         hard_score=40,
     )

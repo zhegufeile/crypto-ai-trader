@@ -8,10 +8,17 @@ from app.data.schema import Direction, MarketSnapshot, RiskDecision, StructureTy
 class FakeLiveTrader:
     def __init__(self) -> None:
         self.open_called = False
+        self.prepare_called = False
+        self.enter_called = False
         self.update_called = False
 
     def open_trade(self, signal: TradeSignal, notional_usdt: float) -> SimulatedTrade:
         self.open_called = True
+        trade = self.prepare_trade(signal, notional_usdt)
+        return self.enter_prepared_trade(trade)
+
+    def prepare_trade(self, signal: TradeSignal, notional_usdt: float) -> SimulatedTrade:
+        self.prepare_called = True
         return SimulatedTrade(
             symbol=signal.symbol,
             direction=signal.direction.value,
@@ -26,6 +33,10 @@ class FakeLiveTrader:
             tp1_price=signal.entry * 1.01,
             tp2_price=signal.entry * 1.02,
         )
+
+    def enter_prepared_trade(self, trade: SimulatedTrade) -> SimulatedTrade:
+        self.enter_called = True
+        return trade
 
     def update_trade(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> SimulatedTrade:
         self.update_called = True
@@ -59,7 +70,8 @@ def test_execution_engine_uses_live_trader_when_simulation_disabled():
     )
 
     assert trade is not None
-    assert fake_live.open_called is True
+    assert fake_live.prepare_called is True
+    assert fake_live.enter_called is True
 
 
 def test_execution_engine_routes_management_to_live_trader():

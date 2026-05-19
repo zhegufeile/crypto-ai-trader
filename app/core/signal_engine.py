@@ -3,13 +3,20 @@ from app.ai.scorer import SignalScorer
 from app.ai.validators import normalize_analysis
 from app.config import Settings, get_settings
 from app.core.risk_manager import RiskManager
-from app.data.schema import Candidate, CandidateDiagnostic, StrategyMatchDiagnostic, TradeSignal
+from app.data.schema import Candidate, CandidateDiagnostic, MarketSnapshot, StrategyMatchDiagnostic, TradeSignal
+from app.knowledge.distiller import StrategyCard
 from app.knowledge.strategy_store import StrategyStore
 from app.strategy.base import Strategy
 from app.strategy.breakout import BreakoutStrategy
 from app.strategy.momentum import MomentumStrategy
 from app.strategy.pullback import PullbackStrategy
 from app.strategy.sentiment import SentimentStrategy
+
+
+PRIORITY_STRATEGY_NAME = "core_confluence_pullback_breakout"
+PRIORITY_STRATEGY_SCORE_FLOOR = 100.0
+NON_PRIORITY_SCORE_PENALTY = 2.0
+RECOGNIZED_MARKET_STATES = {"trend_or_acceleration", "uptrend_pullback", "transition", "range_or_chop"}
 
 
 class SignalEngine:
@@ -58,7 +65,10 @@ class SignalEngine:
             )
             if not risk.allowed or not analysis.entry or not analysis.stop_loss or not analysis.take_profit:
                 continue
-            score = self.scorer.score(candidate, analysis)
+            score = self._priority_adjusted_score(
+                self.scorer.score(candidate, analysis),
+                strategy_matches,
+            )
             signal = TradeSignal(
                 symbol=analysis.symbol,
                 direction=analysis.direction,
@@ -77,7 +87,7 @@ class SignalEngine:
             existing = best_signal_by_symbol.get(signal.symbol)
             if existing is None or signal.score > existing.score:
                 best_signal_by_symbol[signal.symbol] = signal
-        return sorted(best_signal_by_symbol.values(), key=lambda signal: signal.score, reverse=True)
+        return sorted(best_signal_by_symbol.values(), key=self._signal_sort_key, reverse=True)
 
     def diagnose_candidates(
         self,
@@ -101,7 +111,10 @@ class SignalEngine:
             )
             signal = None
             if risk.allowed and analysis.entry and analysis.stop_loss and analysis.take_profit:
-                score = self.scorer.score(candidate, analysis)
+                score = self._priority_adjusted_score(
+                    self.scorer.score(candidate, analysis),
+                    strategy_matches,
+                )
                 signal = TradeSignal(
                     symbol=analysis.symbol,
                     direction=analysis.direction,
@@ -114,6 +127,8 @@ class SignalEngine:
                     structure=analysis.structure,
                     reasons=analysis.reason + risk.reasons,
                     management_plan=analysis.management_plan,
+                    primary_strategy_name=strategy_matches[0].name if strategy_matches else None,
+                    matched_strategy_names=[match.name for match in strategy_matches],
                 )
                 accepted_count += 1
             diagnostics.append(
@@ -140,6 +155,24 @@ class SignalEngine:
             ),
             reverse=True,
         )
+
+    @staticmethod
+    def _has_priority_strategy(strategy_matches: list[StrategyMatchDiagnostic]) -> bool:
+        return bool(strategy_matches and strategy_matches[0].name == PRIORITY_STRATEGY_NAME)
+
+    def _priority_adjusted_score(
+        self,
+        score: float,
+        strategy_matches: list[StrategyMatchDiagnostic],
+    ) -> float:
+        if self._has_priority_strategy(strategy_matches):
+            return max(score, PRIORITY_STRATEGY_SCORE_FLOOR)
+        return round(max(score - NON_PRIORITY_SCORE_PENALTY, 0), 2)
+
+    @staticmethod
+    def _signal_sort_key(signal: TradeSignal) -> tuple[int, float]:
+        priority = int(signal.primary_strategy_name == PRIORITY_STRATEGY_NAME)
+        return priority, signal.score
 
     def _apply_strategy_scores(self, candidate: Candidate) -> None:
         for strategy in self.strategies:
@@ -219,6 +252,8 @@ class SignalEngine:
             card_tier = getattr(card, "strategy_tier", "watchlist")
             if not self._is_tier_enabled(card_tier, strategy_tier_mode):
                 continue
+            if not self._card_market_state_matches(card, candidate.snapshot):
+                continue
             tier_multiplier = self._strategy_tier_multiplier(card_tier)
             card_bonus = max(card.confidence_bias * 20, 0)
             contribution_notes: list[str] = []
@@ -232,20 +267,19 @@ class SignalEngine:
             if card.market == "bearish" and candidate.snapshot.price_change_pct_24h < 0:
                 card_bonus += 4
                 contribution_notes.append("bearish market bias aligned")
-            if "trend_or_acceleration" in card.preferred_market_states and candidate.snapshot.btc_trend in {"up", "flat"}:
+            if candidate.snapshot.market_regime in card.preferred_market_states:
                 card_bonus += 4
-                contribution_notes.append("trend regime aligned")
-            if "uptrend_pullback" in card.preferred_market_states and candidate.snapshot.price_change_pct_24h > 0:
-                card_bonus += 4
-                contribution_notes.append("pullback regime aligned")
+                contribution_notes.append("preferred market regime aligned")
+            if "pullback_confirmation" in card.entry_conditions:
+                if candidate.snapshot.retest_quality_score < self.settings.min_retest_quality_score:
+                    continue
+                card_bonus += 5
+                contribution_notes.append("pullback confirmation satisfied")
             if "first_reversal_only" in card.entry_conditions:
-                if candidate.snapshot.reversal_stage == "first_reversal":
-                    card_bonus += 6
-                    contribution_notes.append("first reversal condition satisfied")
-                else:
-                    card_bonus -= 8
-                    candidate.reasons.append(f"{card.name} prefers the first clean reversal only")
-                    contribution_notes.append("first reversal condition failed")
+                if candidate.snapshot.reversal_stage != "first_reversal":
+                    continue
+                card_bonus += 6
+                contribution_notes.append("first reversal condition satisfied")
             if "relative_strength_leader" in card.entry_conditions:
                 if candidate.snapshot.relative_strength_score >= self.settings.min_relative_strength_score:
                     card_bonus += 6
@@ -308,3 +342,10 @@ class SignalEngine:
         if strategy_tier_mode == "core+candidate":
             return tier in {"core", "candidate"}
         return True
+
+    @staticmethod
+    def _card_market_state_matches(card: StrategyCard, snapshot: MarketSnapshot) -> bool:
+        preferred_regimes = [state for state in card.preferred_market_states if state in RECOGNIZED_MARKET_STATES]
+        if not preferred_regimes:
+            return True
+        return snapshot.market_regime in preferred_regimes
