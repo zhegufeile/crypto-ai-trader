@@ -1,15 +1,30 @@
 services:
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   trader:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     env_file:
       - ../.env
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       FRONTEND_ORIGINS: '["https://www.pluseclould.xyz"]'
     restart: unless-stopped
     volumes:
-      - ../crypto_ai_trader.db:/app/crypto_ai_trader.db
       - ../data:/app/data
 
   caddy:
@@ -28,5 +43,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data:
   caddy_data:
   caddy_config:
