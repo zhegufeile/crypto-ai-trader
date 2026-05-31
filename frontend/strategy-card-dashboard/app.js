@@ -456,9 +456,17 @@ function renderDiagnostics(items) {
           <div class="diagnostic-box">
             <strong>Structure</strong>
             Regime ${escapeHtml(snapshot.market_regime || "unknown")}<br>
+            Direction bias ${fmtNum(snapshot.htf_trend_bias ?? 0)}<br>
             RS ${fmtNum(snapshot.relative_strength_score || 0)}<br>
             Retest ${fmtNum(snapshot.retest_quality_score || 0)}<br>
             Follow-through ${fmtNum(snapshot.follow_through_score || 0)}
+          </div>
+          <div class="diagnostic-box">
+            <strong>Execution Context</strong>
+            Breakout accept ${fmtNum(snapshot.breakout_acceptance_score ?? 0)}<br>
+            Relative volume ${fmtNum(snapshot.relative_volume_ratio ?? 0)}x<br>
+            VWAP distance ${fmtNum(snapshot.distance_from_vwap_atr ?? 0)} ATR<br>
+            Breakout distance ${fmtNum(snapshot.distance_from_breakout_level_atr ?? 0)} ATR
           </div>
           <div class="diagnostic-box">
             <strong>Onchain</strong>

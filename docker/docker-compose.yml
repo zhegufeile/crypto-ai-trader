@@ -3,6 +3,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        APP_UID: ${APP_UID:-1001}
+        APP_GID: ${APP_GID:-1002}
     env_file:
       - ../.env
     ports:

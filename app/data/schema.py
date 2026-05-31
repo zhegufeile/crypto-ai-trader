@@ -36,6 +36,11 @@ class MarketSnapshot(BaseModel):
     sector_strength_score: float = 0.5
     retest_quality_score: float = 0.5
     follow_through_score: float = 0.5
+    htf_trend_bias: float | None = None
+    breakout_acceptance_score: float | None = None
+    relative_volume_ratio: float | None = None
+    distance_from_vwap_atr: float | None = None
+    distance_from_breakout_level_atr: float | None = None
     onchain_signal_score: float = 0.0
     onchain_wallet_count: int = 0
     onchain_buy_amount_usd: float = 0.0

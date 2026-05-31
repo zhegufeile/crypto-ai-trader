@@ -6,8 +6,8 @@ class RuleBasedAnalyst:
 
     def analyze(self, candidate: Candidate) -> AnalysisResult:
         snapshot = candidate.snapshot
-        direction = Direction.LONG if snapshot.price_change_pct_24h >= 0 else Direction.SHORT
         structure = self._infer_structure(candidate)
+        direction = self._infer_direction(snapshot, structure)
         confidence = self._estimate_confidence(candidate)
         rr = self._estimate_rr(candidate)
         entry = snapshot.price
@@ -36,6 +36,8 @@ class RuleBasedAnalyst:
     @staticmethod
     def _infer_structure(candidate: Candidate) -> StructureType:
         change = candidate.snapshot.price_change_pct_24h
+        if candidate.snapshot.market_regime == "uptrend_pullback" and candidate.snapshot.retest_quality_score >= 0.6:
+            return StructureType.PULLBACK
         if change >= 4:
             return StructureType.BREAKOUT
         if abs(change) >= 6:
@@ -45,6 +47,27 @@ class RuleBasedAnalyst:
         if "kol_attention" in candidate.tags:
             return StructureType.SENTIMENT
         return StructureType.UNKNOWN
+
+    @staticmethod
+    def _infer_direction(snapshot, structure: StructureType) -> Direction:
+        htf_bias = getattr(snapshot, "htf_trend_bias", 0.0) or 0.0
+        if (
+            structure == StructureType.PULLBACK
+            and snapshot.market_regime == "uptrend_pullback"
+            and htf_bias >= 0.2
+            and snapshot.relative_strength_score >= 0.6
+            and snapshot.retest_quality_score >= 0.6
+        ):
+            return Direction.LONG
+        if (
+            structure in {StructureType.BREAKOUT, StructureType.MOMENTUM}
+            and htf_bias >= 0.2
+            and snapshot.follow_through_score >= 0.55
+        ):
+            return Direction.LONG
+        if htf_bias <= -0.2 and snapshot.follow_through_score >= 0.55:
+            return Direction.SHORT
+        return Direction.LONG if snapshot.price_change_pct_24h >= 0 else Direction.SHORT
 
     @staticmethod
     def _estimate_rr(candidate: Candidate) -> float:

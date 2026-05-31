@@ -1,3 +1,4 @@
+from app.ai.analyst import RuleBasedAnalyst
 from app.config import Settings
 from app.core.simulator import SimulatedTrade
 from app.core.signal_engine import SignalEngine
@@ -249,3 +250,73 @@ def test_signal_engine_prioritizes_confluence_core_card(monkeypatch):
     assert signals[0].primary_strategy_name == "core_confluence_pullback_breakout"
     assert signals[0].score == 100.0
     assert signals[1].score == 93.0
+
+
+def test_rule_based_analyst_prefers_htf_pullback_reclaim_direction_over_24h_color():
+    snapshot = MarketSnapshot(
+        symbol="ETHUSDT",
+        price=2500,
+        price_change_pct_24h=-1.9,
+        quote_volume_24h=220_000_000,
+        oi=1200,
+        funding_rate=0.0001,
+        long_short_ratio=1.08,
+        taker_buy_sell_ratio=1.12,
+        btc_trend="up",
+        market_regime="uptrend_pullback",
+        reversal_stage="trend",
+        relative_strength_score=0.82,
+        retest_quality_score=0.8,
+        follow_through_score=0.72,
+    )
+    object.__setattr__(snapshot, "htf_trend_bias", 0.85)
+    candidate = Candidate(snapshot=snapshot, hard_score=88, reasons=["bullish reclaim setup"])
+
+    analysis = RuleBasedAnalyst().analyze(candidate)
+
+    assert analysis.direction.value == "long"
+    assert analysis.structure.value == "pullback"
+
+
+def test_signal_engine_registers_new_confirmation_strategies():
+    engine = SignalEngine(settings=Settings())
+
+    strategy_names = {strategy.name for strategy in engine.strategies}
+
+    assert "breakout_retest_confirmation" in strategy_names
+    assert "htf_trend_pullback_reclaim" in strategy_names
+
+
+def test_signal_engine_blocks_unconfirmed_overextended_breakout():
+    settings = Settings(
+        confidence_threshold=0.6,
+        min_rr=1.5,
+        min_volume_usdt=1000,
+        max_open_positions=3,
+    )
+    snapshot = MarketSnapshot(
+        symbol="SOLUSDT",
+        price=150,
+        price_change_pct_24h=8.4,
+        quote_volume_24h=240_000_000,
+        oi=1500,
+        funding_rate=0.0001,
+        long_short_ratio=1.15,
+        taker_buy_sell_ratio=1.2,
+        btc_trend="up",
+        market_regime="trend_or_acceleration",
+        reversal_stage="trend",
+        relative_strength_score=0.8,
+        retest_quality_score=0.62,
+        follow_through_score=0.7,
+    )
+    object.__setattr__(snapshot, "htf_trend_bias", 0.8)
+    object.__setattr__(snapshot, "breakout_acceptance_score", 0.2)
+    object.__setattr__(snapshot, "relative_volume_ratio", 0.95)
+    object.__setattr__(snapshot, "distance_from_vwap_atr", 1.65)
+    object.__setattr__(snapshot, "distance_from_breakout_level_atr", 1.25)
+    candidate = Candidate(snapshot=snapshot, hard_score=95, reasons=["extended breakout"])
+
+    signals = SignalEngine(settings=settings).generate_signals([candidate])
+
+    assert signals == []

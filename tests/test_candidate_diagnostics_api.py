@@ -24,6 +24,11 @@ class FakeCollector:
                     relative_strength_score=0.8,
                     retest_quality_score=0.7,
                     follow_through_score=0.75,
+                    htf_trend_bias=0.82,
+                    breakout_acceptance_score=0.74,
+                    relative_volume_ratio=1.48,
+                    distance_from_vwap_atr=0.42,
+                    distance_from_breakout_level_atr=0.21,
                     onchain_signal_score=0.9,
                     onchain_wallet_count=4,
                 ),
@@ -119,6 +124,11 @@ def test_candidate_diagnostics_api_returns_tradeable_and_blocked(monkeypatch):
     assert payload[0]["strategy_tier_mode"] == "core-only"
     assert payload[0]["strategy_matches"][0]["name"] == "pnk_core"
     assert payload[0]["strategy_matches"][0]["tier"] == "core"
+    assert payload[0]["snapshot"]["htf_trend_bias"] == 0.82
+    assert payload[0]["snapshot"]["breakout_acceptance_score"] == 0.74
+    assert payload[0]["snapshot"]["relative_volume_ratio"] == 1.48
+    assert payload[0]["snapshot"]["distance_from_vwap_atr"] == 0.42
+    assert payload[0]["snapshot"]["distance_from_breakout_level_atr"] == 0.21
     blocked = next(item for item in payload if item["symbol"] == "SCAMUSDT")
     assert blocked["tradeable"] is False
     assert "onchain security flags this token as honeypot" in blocked["risk"]["reasons"]

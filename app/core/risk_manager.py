@@ -53,10 +53,50 @@ class RiskManager:
         if candidate.snapshot.reversal_stage == "late_reversal":
             reasons.append("setup is too late in the reversal sequence")
         if (
+            analysis.direction == Direction.LONG
+            and candidate.snapshot.htf_trend_bias is not None
+            and candidate.snapshot.htf_trend_bias <= -self.settings.min_htf_trend_bias
+        ):
+            reasons.append("higher timeframe trend is leaning against the long setup")
+        if (
+            analysis.direction == Direction.SHORT
+            and candidate.snapshot.htf_trend_bias is not None
+            and candidate.snapshot.htf_trend_bias >= self.settings.min_htf_trend_bias
+        ):
+            reasons.append("higher timeframe trend is leaning against the short setup")
+        if (
             analysis.structure.value in {"breakout", "momentum"}
             and candidate.snapshot.follow_through_score < self.settings.min_follow_through_score
         ):
             reasons.append("follow-through is too weak for an expansion setup")
+        if analysis.structure.value in {"breakout", "momentum"}:
+            if (
+                candidate.snapshot.breakout_acceptance_score is not None
+                and candidate.snapshot.breakout_acceptance_score < self.settings.min_breakout_acceptance_score
+            ):
+                reasons.append("breakout acceptance is too weak")
+            if (
+                candidate.snapshot.relative_volume_ratio is not None
+                and candidate.snapshot.relative_volume_ratio < self.settings.min_relative_volume_ratio
+            ):
+                reasons.append("relative volume does not confirm the expansion")
+            if (
+                candidate.snapshot.distance_from_vwap_atr is not None
+                and candidate.snapshot.distance_from_vwap_atr > self.settings.max_distance_from_vwap_atr
+            ):
+                reasons.append("entry is too extended from VWAP")
+            if (
+                candidate.snapshot.distance_from_breakout_level_atr is not None
+                and candidate.snapshot.distance_from_breakout_level_atr > self.settings.max_distance_from_breakout_level_atr
+            ):
+                reasons.append("entry is too far from the breakout level")
+        if (
+            analysis.structure.value == "pullback"
+            and candidate.snapshot.market_regime == "uptrend_pullback"
+            and candidate.snapshot.htf_trend_bias is not None
+            and candidate.snapshot.htf_trend_bias < self.settings.min_htf_trend_bias
+        ):
+            reasons.append("higher timeframe trend is too weak for a pullback reclaim")
         if candidate.snapshot.relative_strength_score < 0.35:
             reasons.append("relative strength is too weak")
         if candidate.snapshot.onchain_honeypot:

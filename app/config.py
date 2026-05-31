@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     min_relative_strength_score: float = 0.58
     min_follow_through_score: float = 0.45
     min_retest_quality_score: float = 0.52
+    min_breakout_acceptance_score: float = 0.55
+    min_relative_volume_ratio: float = 1.2
+    min_htf_trend_bias: float = 0.15
+    max_distance_from_vwap_atr: float = 1.1
+    max_distance_from_breakout_level_atr: float = 0.8
     live_force_immediate_entry_for_testing: bool = False
     signal_strategy_tier_mode: str = "core+candidate"
     core_strategy_bonus_multiplier: float = 1.4

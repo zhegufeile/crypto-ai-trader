@@ -32,12 +32,13 @@ def test_simulator_opens_trade_with_confirmation_for_breakout():
 
 
 def test_simulator_can_force_immediate_entry_for_local_live_testing():
-    trade = Simulator(settings=Settings(live_force_immediate_entry_for_testing=True)).open_trade(build_signal(), 50)
+    settings = Settings(live_force_immediate_entry_for_testing=True)
+    trade = Simulator(settings=settings).open_trade(build_signal(), 50)
 
     assert trade.status == "open"
     assert trade.entry_mode == "market"
     assert trade.entry_confirmed is True
-    assert trade.fees_paid_usdt == 0
+    assert trade.fees_paid_usdt == 50 * settings.simulation_fee_rate
 
 
 def test_simulator_confirms_breakout_then_arms_tp1_profit_lock():

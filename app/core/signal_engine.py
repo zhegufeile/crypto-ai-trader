@@ -8,6 +8,8 @@ from app.knowledge.distiller import StrategyCard
 from app.knowledge.strategy_store import StrategyStore
 from app.strategy.base import Strategy
 from app.strategy.breakout import BreakoutStrategy
+from app.strategy.breakout_retest_confirmation import BreakoutRetestConfirmationStrategy
+from app.strategy.htf_trend_pullback_reclaim import HtfTrendPullbackReclaimStrategy
 from app.strategy.momentum import MomentumStrategy
 from app.strategy.pullback import PullbackStrategy
 from app.strategy.sentiment import SentimentStrategy
@@ -35,8 +37,10 @@ class SignalEngine:
         self.strategy_store = StrategyStore()
         self.strategies = strategies or [
             BreakoutStrategy(),
+            BreakoutRetestConfirmationStrategy(),
             MomentumStrategy(),
             PullbackStrategy(),
+            HtfTrendPullbackReclaimStrategy(),
             SentimentStrategy(),
         ]
 

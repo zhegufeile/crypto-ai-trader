@@ -1,0 +1,22 @@
+# regime_aware_momentum_confluence_aggressive
+
+- description: 偏进攻的动量合并卡，保留突破、放量、持仓上升、板块龙头和情绪共振，但降低门槛，优先抓主升段的延续和快速扩张，不要求过多确认才入场。
+- market: bullish
+- timeframe: intraday
+- creator: manual_merge
+- confidence_bias: 0.14
+- preferred_symbols: none
+- avoided_symbols: none
+- preferred_market_states: trend_or_acceleration, breakout_followthrough, momentum_rotation, liquidity_expansion
+- entry_conditions: breakout, volume_expansion, oi_rising, momentum_accelerating, social_momentum_rising, smart_money_accumulation_signal, sector_strength_confirmed, btc_not_obstructive, leader_in_sector
+- exit_conditions: stop_loss_hit, target_reached, momentum_decay, failed_breakout_reversal
+- invalidation_conditions: btc_strength_loss, failed_follow_through_after_breakout, liquidity_thins, funding_extreme, narrative_exhaustion, chop_returns
+- risk_notes: 以胜率和频率平衡为目标，不做过度苛刻的一票否决；如果板块、龙头和成交量都在，允许较少确认提前试单；但若开盘后迟迟不延续，仍要及时降级或放弃。
+- historical_win_rate: unknown
+- historical_rr: unknown
+- sample_size: 0
+- strategy_tier: candidate
+- tier_score: 0.76
+- tier_rationale: 机会更多 | 仍保留基本过滤 | 适合强势日和题材爆发日
+- tags: breakout, momentum, volume, oi, social, smart_money, reclaim
+- source_posts: 0

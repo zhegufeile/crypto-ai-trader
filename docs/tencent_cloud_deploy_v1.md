@@ -30,15 +30,22 @@ Open these ports in Tencent Cloud security group:
 
 ## 3. Upload project
 
-Place the repo on the server, for example:
+Place the repo under `agentuser`, and keep `ubuntu` only as the SSH entry user if needed:
 
 ```bash
-cd /root
+sudo -iu agentuser
+cd /home/agentuser
 git clone <your-repo-url> crypto-ai-trader
-cd crypto-ai-trader
+cd /home/agentuser/crypto-ai-trader
 ```
 
 If you are not using Git on the server, upload the full project directory instead.
+
+Recommended ownership baseline:
+
+```bash
+sudo chown -R agentuser:agentuser /home/agentuser/crypto-ai-trader
+```
 
 ## 4. Create production env
 
@@ -59,6 +66,19 @@ Then fill:
 - `OPENAI_API_KEY`
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` if you want alerts
 - any future paid API keys
+
+For non-root app containers, keep these aligned with the host `agentuser` account on the server:
+
+```bash
+id agentuser
+```
+
+Then set:
+
+- `APP_UID=<agentuser uid>`
+- `APP_GID=<agentuser gid>`
+
+The current default template assumes `APP_UID=1001` and `APP_GID=1002`.
 
 ## 5. Prepare onchain data
 
@@ -97,6 +117,8 @@ Expected:
 ## 7. Start containers
 
 ```bash
+sudo -iu agentuser
+cd /home/agentuser/crypto-ai-trader
 docker compose -f docker/docker-compose.prod.yml up -d --build
 ```
 
@@ -114,6 +136,14 @@ Check logs:
 docker compose -f docker/docker-compose.prod.yml logs --tail=100 trader
 docker compose -f docker/docker-compose.prod.yml logs --tail=100 caddy
 ```
+
+Confirm the app container is no longer running as root:
+
+```bash
+docker compose -f docker/docker-compose.prod.yml exec trader id
+```
+
+Expected: the reported uid/gid should match `APP_UID` / `APP_GID`, not `0(root)`.
 
 Verify endpoints:
 
