@@ -7,7 +7,14 @@ from app.config import get_settings
 from app.core.live_trader import BinanceLiveTrader
 from app.core.scheduler import _fallback_snapshot_for_trade, _log_fee_delta, _log_trade_transition_events
 from app.storage.db import get_session
-from app.storage.repositories import SignalRepository, TradeFeeRepository, TradeJournalRepository, TradeRepository
+from app.storage.repositories import (
+    KOLPostRepository,
+    SignalRepository,
+    StrategyMetricRepository,
+    TradeFeeRepository,
+    TradeJournalRepository,
+    TradeRepository,
+)
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -32,6 +39,8 @@ def reset_simulation_runtime(
     clear_signals: bool = True,
     clear_positions: bool = True,
     clear_journal: bool = True,
+    clear_kol_posts: bool = True,
+    clear_strategy_metrics: bool = True,
     session: Session = Depends(get_session),
 ) -> dict:
     result = {
@@ -39,6 +48,8 @@ def reset_simulation_runtime(
         "positions_deleted": 0,
         "journal_deleted": 0,
         "fees_deleted": 0,
+        "kol_posts_deleted": 0,
+        "strategy_metrics_deleted": 0,
     }
     if clear_signals:
         result["signals_deleted"] = SignalRepository(session).delete_all()
@@ -47,6 +58,10 @@ def reset_simulation_runtime(
     if clear_journal:
         result["journal_deleted"] = TradeJournalRepository(session).delete_all()
         result["fees_deleted"] = TradeFeeRepository(session).delete_all()
+    if clear_kol_posts:
+        result["kol_posts_deleted"] = KOLPostRepository(session).delete_all()
+    if clear_strategy_metrics:
+        result["strategy_metrics_deleted"] = StrategyMetricRepository(session).delete_all()
     result["status"] = "ok"
     return result
 

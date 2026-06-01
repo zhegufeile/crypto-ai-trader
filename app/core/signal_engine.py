@@ -15,7 +15,7 @@ from app.strategy.pullback import PullbackStrategy
 from app.strategy.sentiment import SentimentStrategy
 
 
-PRIORITY_STRATEGY_NAME = "core_confluence_pullback_breakout"
+PRIORITY_STRATEGY_NAMES = {"regime_aware_momentum_confluence_stable_gate"}
 PRIORITY_STRATEGY_SCORE_FLOOR = 100.0
 NON_PRIORITY_SCORE_PENALTY = 2.0
 RECOGNIZED_MARKET_STATES = {"trend_or_acceleration", "uptrend_pullback", "transition", "range_or_chop"}
@@ -162,7 +162,7 @@ class SignalEngine:
 
     @staticmethod
     def _has_priority_strategy(strategy_matches: list[StrategyMatchDiagnostic]) -> bool:
-        return bool(strategy_matches and strategy_matches[0].name == PRIORITY_STRATEGY_NAME)
+        return bool(strategy_matches and strategy_matches[0].name in PRIORITY_STRATEGY_NAMES)
 
     def _priority_adjusted_score(
         self,
@@ -175,7 +175,7 @@ class SignalEngine:
 
     @staticmethod
     def _signal_sort_key(signal: TradeSignal) -> tuple[int, float]:
-        priority = int(signal.primary_strategy_name == PRIORITY_STRATEGY_NAME)
+        priority = int(signal.primary_strategy_name in PRIORITY_STRATEGY_NAMES)
         return priority, signal.score
 
     def _apply_strategy_scores(self, candidate: Candidate) -> None:
@@ -258,6 +258,8 @@ class SignalEngine:
                 continue
             if not self._card_market_state_matches(card, candidate.snapshot):
                 continue
+            if self._card_is_invalidated(card, candidate.snapshot):
+                continue
             tier_multiplier = self._strategy_tier_multiplier(card_tier)
             card_bonus = max(card.confidence_bias * 20, 0)
             contribution_notes: list[str] = []
@@ -274,34 +276,16 @@ class SignalEngine:
             if candidate.snapshot.market_regime in card.preferred_market_states:
                 card_bonus += 4
                 contribution_notes.append("preferred market regime aligned")
-            if "pullback_confirmation" in card.entry_conditions:
-                if candidate.snapshot.retest_quality_score < self.settings.min_retest_quality_score:
-                    continue
-                card_bonus += 5
-                contribution_notes.append("pullback confirmation satisfied")
-            if "first_reversal_only" in card.entry_conditions:
-                if candidate.snapshot.reversal_stage != "first_reversal":
-                    continue
-                card_bonus += 6
-                contribution_notes.append("first reversal condition satisfied")
-            if "relative_strength_leader" in card.entry_conditions:
-                if candidate.snapshot.relative_strength_score >= self.settings.min_relative_strength_score:
-                    card_bonus += 6
-                    contribution_notes.append("relative strength leadership confirmed")
-                else:
-                    card_bonus -= 6
-                    candidate.reasons.append(f"{card.name} expects clearer relative strength leadership")
-                    contribution_notes.append("relative strength too weak")
+            entry_bonus, satisfied_count = self._entry_condition_bonus(card, candidate, contribution_notes)
+            if entry_bonus is None:
+                continue
+            card_bonus += entry_bonus
+            if "confluence_gate_passed" in card.entry_conditions and satisfied_count < 3:
+                candidate.reasons.append(f"{card.name} needs stronger multi-factor confluence before entry")
+                continue
             if len(card.entry_conditions) >= 2:
                 card_bonus += 2
                 contribution_notes.append("multi-condition setup bonus")
-            if (
-                "failed_follow_through_after_retest" in card.invalidation_conditions
-                and candidate.snapshot.follow_through_score < self.settings.min_follow_through_score
-            ):
-                card_bonus -= 10
-                candidate.reasons.append(f"{card.name} is invalidated by weak follow-through")
-                contribution_notes.append("follow-through invalidation triggered")
             tier_score_bonus = min(max(getattr(card, "tier_score", 0.0), 0.0) * self.settings.tier_score_bonus_scale, 10.0)
             weighted_bonus = max(card_bonus, 0) * tier_multiplier + min(card_bonus, 0)
             weighted_bonus += tier_score_bonus
@@ -353,3 +337,104 @@ class SignalEngine:
         if not preferred_regimes:
             return True
         return snapshot.market_regime in preferred_regimes
+
+    def _entry_condition_bonus(
+        self,
+        card: StrategyCard,
+        candidate: Candidate,
+        contribution_notes: list[str],
+    ) -> tuple[float | None, int]:
+        snapshot = candidate.snapshot
+        card_bonus = 0.0
+        satisfied_count = 0
+
+        for condition in card.entry_conditions:
+            if condition == "breakout":
+                if (snapshot.breakout_acceptance_score or 0.0) < self.settings.min_breakout_acceptance_score:
+                    candidate.reasons.append(f"{card.name} expects cleaner breakout acceptance")
+                    return None, satisfied_count
+                card_bonus += 5
+                satisfied_count += 1
+                contribution_notes.append("breakout acceptance satisfied")
+            elif condition == "volume_expansion":
+                if (snapshot.relative_volume_ratio or 0.0) < self.settings.min_relative_volume_ratio:
+                    candidate.reasons.append(f"{card.name} expects stronger relative volume")
+                    return None, satisfied_count
+                card_bonus += 4
+                satisfied_count += 1
+                contribution_notes.append("relative volume expansion confirmed")
+            elif condition == "oi_rising":
+                if snapshot.oi is not None and snapshot.oi > 0:
+                    card_bonus += 2
+                    satisfied_count += 1
+                    contribution_notes.append("open interest participation is present")
+            elif condition == "pullback_confirmation":
+                if snapshot.retest_quality_score < self.settings.min_retest_quality_score:
+                    candidate.reasons.append(f"{card.name} expects a cleaner retest before entry")
+                    return None, satisfied_count
+                card_bonus += 5
+                satisfied_count += 1
+                contribution_notes.append("pullback confirmation satisfied")
+            elif condition in {"first_reversal_only", "first_retest_only"}:
+                if snapshot.reversal_stage != "first_reversal":
+                    candidate.reasons.append(f"{card.name} only allows first-retest structures")
+                    return None, satisfied_count
+                card_bonus += 6
+                satisfied_count += 1
+                contribution_notes.append("first retest condition satisfied")
+            elif condition in {"relative_strength_leader", "leader_in_sector"}:
+                if snapshot.relative_strength_score < self.settings.min_relative_strength_score:
+                    candidate.reasons.append(f"{card.name} expects clearer relative strength leadership")
+                    return None, satisfied_count
+                card_bonus += 6
+                satisfied_count += 1
+                contribution_notes.append("relative strength leadership confirmed")
+            elif condition in {"sector_or_narrative_leadership_confirmed", "sector_strength_confirmed"}:
+                if snapshot.sector_strength_score < self.settings.min_relative_strength_score:
+                    candidate.reasons.append(f"{card.name} expects stronger sector leadership")
+                    return None, satisfied_count
+                card_bonus += 4
+                satisfied_count += 1
+                contribution_notes.append("sector leadership confirmed")
+            elif condition == "btc_backdrop_supportive":
+                if snapshot.btc_trend not in {"up", "flat"}:
+                    candidate.reasons.append(f"{card.name} requires a supportive BTC backdrop")
+                    return None, satisfied_count
+                card_bonus += 4
+                satisfied_count += 1
+                contribution_notes.append("BTC backdrop is supportive")
+            elif condition in {"smart_money_signal_cluster", "smart_money_accumulation_signal"}:
+                if not self._has_smart_money_confirmation(snapshot):
+                    candidate.reasons.append(f"{card.name} expects stronger smart-money confirmation")
+                    return None, satisfied_count
+                card_bonus += 5
+                satisfied_count += 1
+                contribution_notes.append("smart-money confirmation is present")
+
+        return card_bonus, satisfied_count
+
+    def _card_is_invalidated(self, card: StrategyCard, snapshot: MarketSnapshot) -> bool:
+        for condition in card.invalidation_conditions:
+            if condition in {
+                "failed_follow_through_after_retest",
+                "failed_follow_through_after_breakout",
+                "follow_through_absent_after_entry",
+            } and snapshot.follow_through_score < self.settings.min_follow_through_score:
+                return True
+            if condition == "failed_retest" and snapshot.retest_quality_score < self.settings.min_retest_quality_score:
+                return True
+            if condition == "range_or_chop" and snapshot.market_regime == "range_or_chop":
+                return True
+            if condition == "liquidity_deteriorates" and snapshot.quote_volume_24h < self.settings.min_volume_usdt:
+                return True
+            if condition == "single_source_only" and not self._has_smart_money_confirmation(snapshot):
+                return True
+            if condition == "second_or_third_retest" and snapshot.reversal_stage not in {"first_reversal", "trend"}:
+                return True
+        return False
+
+    def _has_smart_money_confirmation(self, snapshot: MarketSnapshot) -> bool:
+        return (
+            snapshot.onchain_signal_score >= self.settings.min_onchain_signal_score
+            and snapshot.onchain_wallet_count >= 2
+        )

@@ -1,0 +1,74 @@
+{
+  "name": "regime_aware_momentum_confluence_stable_gate",
+  "description": "稳健主卡，先看社媒、链上、板块、龙头和 BTC 背景是否共振，再只做第一次高质量回踩或突破确认，强调过滤噪音但不过度抬高门槛。",
+  "market": "bullish",
+  "timeframe": "intraday",
+  "creator": "manual_merge",
+  "confidence_bias": 0.16,
+  "preferred_symbols": [],
+  "avoided_symbols": [],
+  "preferred_market_states": [
+    "trend_or_acceleration",
+    "uptrend_pullback",
+    "leader_rotation",
+    "liquidity_expansion"
+  ],
+  "entry_conditions": [
+    "btc_backdrop_supportive",
+    "sector_or_narrative_leadership_confirmed",
+    "relative_strength_leader",
+    "breakout",
+    "volume_expansion",
+    "oi_rising",
+    "pullback_confirmation",
+    "sentiment_tailwind",
+    "smart_money_signal_cluster",
+    "multiple_kol_alignment",
+    "first_retest_only",
+    "confluence_gate_passed"
+  ],
+  "exit_conditions": [
+    "stop_loss_hit",
+    "target_reached",
+    "breakout_fails_and_reclaims_fail",
+    "follow_through_absent_after_entry",
+    "leader_fails_to_hold"
+  ],
+  "invalidation_conditions": [
+    "btc_turns_against_setup",
+    "range_or_chop",
+    "liquidity_deteriorates",
+    "funding_overheats",
+    "leader_loses_relative_strength",
+    "narrative_fades",
+    "second_or_third_retest",
+    "single_source_only",
+    "failed_retest"
+  ],
+  "risk_notes": [
+    "只做有共振的机会，不要求每一项都完美满足；如果技术面、情绪面和链上至少两到三类一致，再考虑开单；若后续没有延续，及时离场，不硬扛。"
+  ],
+  "historical_win_rate": null,
+  "historical_rr": null,
+  "sample_size": 0,
+  "tags": [
+    "breakout",
+    "volume",
+    "oi",
+    "pullback",
+    "leader",
+    "smart_money",
+    "social",
+    "regime_filter",
+    "confluence"
+  ],
+  "source_posts": 0,
+  "strategy_tier": "core",
+  "tier_score": 0.88,
+  "tier_rationale": [
+    "过滤更稳",
+    "兼顾开单机会",
+    "适合做主执行卡"
+  ],
+  "updated_at": "2026-06-01T09:03:05.883452Z"
+}

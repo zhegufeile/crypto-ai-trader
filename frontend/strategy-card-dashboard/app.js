@@ -15,6 +15,7 @@ const state = {
 };
 
 const DASHBOARD_REFRESH_MS = 15000;
+const DISPLAY_TIMEZONE = "Asia/Shanghai";
 let refreshTimer = null;
 let refreshCountdownTimer = null;
 let nextRefreshAt = null;
@@ -81,7 +82,20 @@ function fmtPct(value) {
 
 function fmtTime(value) {
   if (!value) return "-";
-  return String(value).slice(0, 19).replace("T", " ");
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value).slice(0, 19).replace("T", " ");
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: DISPLAY_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(parsed);
 }
 
 function escapeHtml(value) {

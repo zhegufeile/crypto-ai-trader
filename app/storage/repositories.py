@@ -338,6 +338,14 @@ class KOLPostRepository:
             unique_posts.append(record)
         return unique_posts
 
+    def delete_all(self) -> int:
+        records = list(self.session.exec(select(KOLPostRecord)).all())
+        count = len(records)
+        for record in records:
+            self.session.delete(record)
+        self.session.commit()
+        return count
+
 
 class StrategyMetricRepository:
     def __init__(self, session: Session) -> None:
@@ -401,3 +409,11 @@ class StrategyMetricRepository:
     def get_by_strategy_name(self, strategy_name: str) -> StrategyMetricRecord | None:
         statement = select(StrategyMetricRecord).where(StrategyMetricRecord.strategy_name == strategy_name)
         return self.session.exec(statement).first()
+
+    def delete_all(self) -> int:
+        records = list(self.session.exec(select(StrategyMetricRecord)).all())
+        count = len(records)
+        for record in records:
+            self.session.delete(record)
+        self.session.commit()
+        return count
