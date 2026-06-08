@@ -190,6 +190,7 @@ class MarketCollector:
             htf_trend_bias=context["htf_trend_bias"],
             breakout_acceptance_score=context["breakout_acceptance_score"],
             relative_volume_ratio=context["relative_volume_ratio"],
+            atr=context["atr"],
             distance_from_vwap_atr=context["distance_from_vwap_atr"],
             distance_from_breakout_level_atr=context["distance_from_breakout_level_atr"],
         )

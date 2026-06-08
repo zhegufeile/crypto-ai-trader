@@ -32,7 +32,7 @@ def test_simulator_opens_trade_with_confirmation_for_breakout():
 
 
 def test_simulator_can_force_immediate_entry_for_local_live_testing():
-    settings = Settings(live_force_immediate_entry_for_testing=True)
+    settings = Settings(use_simulation=True, live_force_immediate_entry_for_testing=True)
     trade = Simulator(settings=settings).open_trade(build_signal(), 50)
 
     assert trade.status == "open"
@@ -170,6 +170,62 @@ def test_simulator_arms_tp3_and_closes_on_retrace_to_tp3():
             btc_trend="up",
             follow_through_score=0.75,
             retest_quality_score=0.68,
+        ),
+    )
+
+    assert closed.status == "closed"
+    assert closed.exit_reason == "take profit lock retraced at tp3"
+
+
+def test_simulator_trails_above_target_with_atr_after_price_runs():
+    simulator = Simulator(settings=Settings(live_force_immediate_entry_for_testing=False, target_trailing_atr_multiplier=1.5))
+    trade = simulator.open_trade(build_signal(), 100)
+    trade.status = "open"
+    trade.entry_confirmed = True
+
+    running = simulator.update_trade(
+        trade,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=120,
+            atr=2,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=13,
+            btc_trend="up",
+            follow_through_score=0.85,
+            retest_quality_score=0.72,
+        ),
+    )
+
+    assert running.trail_active is True
+    assert running.current_stop_loss == 117
+
+    still_open = simulator.update_trade(
+        running,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=117.5,
+            atr=2,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=11,
+            btc_trend="up",
+            follow_through_score=0.7,
+            retest_quality_score=0.68,
+        ),
+    )
+    assert still_open.status == "open"
+
+    closed = simulator.update_trade(
+        still_open,
+        MarketSnapshot(
+            symbol="BTCUSDT",
+            price=116.9,
+            atr=2,
+            quote_volume_24h=100_000_000,
+            price_change_pct_24h=10,
+            btc_trend="up",
+            follow_through_score=0.65,
+            retest_quality_score=0.62,
         ),
     )
 

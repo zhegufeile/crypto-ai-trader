@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     min_htf_trend_bias: float = 0.15
     max_distance_from_vwap_atr: float = 1.1
     max_distance_from_breakout_level_atr: float = 0.8
+    target_trailing_atr_multiplier: float = 1.5
     live_force_immediate_entry_for_testing: bool = False
     signal_strategy_tier_mode: str = "core+candidate"
     core_strategy_bonus_multiplier: float = 1.4

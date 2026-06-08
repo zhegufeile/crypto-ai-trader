@@ -89,6 +89,8 @@ class BinanceLiveTrader:
         entry_price = float(position.get("entryPrice", trade.entry) or trade.entry)
         trade.entry = entry_price
         trade.last_price = mark_price
+        trade.max_price_seen = mark_price if trade.max_price_seen is None else max(trade.max_price_seen, mark_price)
+        trade.min_price_seen = mark_price if trade.min_price_seen is None else min(trade.min_price_seen, mark_price)
         trade.unrealized_pnl_usdt = float(position.get("unRealizedProfit", 0) or 0)
         trade.pnl_usdt = trade.realized_pnl_usdt + trade.unrealized_pnl_usdt
         try:
@@ -108,7 +110,7 @@ class BinanceLiveTrader:
             self._finalize_closed_trade(trade, mark_price, "follow-through failed after entry")
             return trade
 
-        self._check_take_profit_steps(trade, mark_price)
+        self._check_take_profit_steps(trade, snapshot)
 
         if self.simulator._stop_triggered(trade, mark_price):
             self._reduce_only_close(trade.symbol, trade.direction, 1.0)
@@ -198,7 +200,8 @@ class BinanceLiveTrader:
                 raise BinanceLiveTradingError(str(exc), trade=trade, context=exc.context) from exc
             raise BinanceLiveTradingError(str(exc), trade=trade) from exc
 
-    def _check_take_profit_steps(self, trade: SimulatedTrade, price: float) -> None:
+    def _check_take_profit_steps(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> None:
+        price = trade.last_price or snapshot.price
         if not trade.tp1_hit and self.simulator._price_reached(trade.direction, price, trade.tp1_price):
             trade.tp1_hit = True
             trade.break_even_armed = True
@@ -212,8 +215,14 @@ class BinanceLiveTrader:
 
         if trade.tp2_hit and not trade.trail_active and self.simulator._price_reached(trade.direction, price, trade.take_profit):
             trade.trail_active = True
-            trade.current_stop_loss = self.simulator._better_stop(trade.direction, trade.current_stop_loss, trade.take_profit)
             trade.status = "open"
+
+        if trade.trail_active:
+            trade.current_stop_loss = self.simulator._better_stop(
+                trade.direction,
+                trade.current_stop_loss,
+                self.simulator._target_trailing_stop(trade, snapshot),
+            )
 
     def _finalize_closed_trade(self, trade: SimulatedTrade, exit_price: float, reason: str) -> None:
         if trade.remaining_notional_usdt > 0:

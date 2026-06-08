@@ -39,6 +39,7 @@ class MarketSnapshot(BaseModel):
     htf_trend_bias: float | None = None
     breakout_acceptance_score: float | None = None
     relative_volume_ratio: float | None = None
+    atr: float | None = None
     distance_from_vwap_atr: float | None = None
     distance_from_breakout_level_atr: float | None = None
     onchain_signal_score: float = 0.0

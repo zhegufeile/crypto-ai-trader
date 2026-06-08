@@ -124,7 +124,7 @@ class Simulator:
             self._close_trade(trade, price, "follow-through failed after entry")
             return trade
 
-        self._check_take_profit_steps(trade, price)
+        self._check_take_profit_steps(trade, snapshot)
 
         if self._stop_triggered(trade, price):
             self._close_trade(trade, trade.current_stop_loss, self._stop_exit_reason(trade))
@@ -188,7 +188,8 @@ class Simulator:
             return weak_follow and snapshot.price <= trade.entry * 0.998
         return weak_follow and snapshot.price >= trade.entry * 1.002
 
-    def _check_take_profit_steps(self, trade: SimulatedTrade, price: float) -> None:
+    def _check_take_profit_steps(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> None:
+        price = snapshot.price
         if not trade.tp1_hit and self._price_reached(trade.direction, price, trade.tp1_price):
             trade.tp1_hit = True
             trade.break_even_armed = True
@@ -202,8 +203,14 @@ class Simulator:
 
         if trade.tp2_hit and not trade.trail_active and self._price_reached(trade.direction, price, trade.take_profit):
             trade.trail_active = True
-            trade.current_stop_loss = self._better_stop(trade.direction, trade.current_stop_loss, trade.take_profit)
             trade.status = "open"
+
+        if trade.trail_active:
+            trade.current_stop_loss = self._better_stop(
+                trade.direction,
+                trade.current_stop_loss,
+                self._target_trailing_stop(trade, snapshot),
+            )
 
     def _take_partial_profit(self, trade: SimulatedTrade, size_pct: float, exit_price: float) -> None:
         if trade.remaining_size_pct <= 0:
@@ -293,6 +300,17 @@ class Simulator:
         if trade.direction == "long":
             return price >= trade.take_profit
         return price <= trade.take_profit
+
+    def _target_trailing_stop(self, trade: SimulatedTrade, snapshot: MarketSnapshot) -> float:
+        atr = snapshot.atr
+        if atr is None or atr <= 0:
+            return trade.take_profit
+        distance = atr * self.settings.target_trailing_atr_multiplier
+        if trade.direction == "long":
+            highest = trade.max_price_seen or snapshot.price
+            return max(trade.take_profit, highest - distance)
+        lowest = trade.min_price_seen or snapshot.price
+        return min(trade.take_profit, lowest + distance)
 
     @staticmethod
     def _better_stop(direction: str, current_stop: float, candidate_stop: float) -> float:
