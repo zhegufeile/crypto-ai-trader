@@ -70,6 +70,22 @@ class MarketCollector:
             : self.settings.max_candidates
         ]
 
+    async def collect_symbol_snapshot(self, symbol: str) -> MarketSnapshot | None:
+        symbol = symbol.upper()
+        if hasattr(self.client, "session"):
+            async with self.client.session() as request_session:
+                tickers = await self.client.get_24h_tickers(client=request_session)
+                ticker = self._ticker_for_symbol(tickers, symbol)
+                if ticker is None:
+                    return None
+                return await self._build_snapshot(ticker, self._btc_trend(tickers), request_session)
+
+        tickers = await self.client.get_24h_tickers()
+        ticker = self._ticker_for_symbol(tickers, symbol)
+        if ticker is None:
+            return None
+        return await self._build_snapshot(ticker, self._btc_trend(tickers))
+
     def _rank_tickers(self, tickers: Iterable[dict]) -> list[dict]:
         ranked: list[dict] = []
         for ticker in tickers:
@@ -86,6 +102,13 @@ class MarketCollector:
             * float(item.get("quoteVolume", 0) or 0),
             reverse=True,
         )[: max(self.settings.max_candidates * self.settings.candidate_buffer_multiplier, self.settings.max_candidates)]
+
+    @staticmethod
+    def _ticker_for_symbol(tickers: Iterable[dict], symbol: str) -> dict | None:
+        for ticker in tickers:
+            if str(ticker.get("symbol", "")).upper() == symbol:
+                return ticker
+        return None
 
     async def _build_snapshot(
         self,
@@ -537,6 +560,7 @@ class MarketCollector:
             "htf_trend_bias": MarketCollector._htf_trend_bias(klines_1h, klines_4h),
             "breakout_acceptance_score": breakout_acceptance_score,
             "relative_volume_ratio": round(relative_volume_ratio, 3),
+            "atr": round(atr, 8),
             "distance_from_vwap_atr": round(distance_from_vwap_atr, 3),
             "distance_from_breakout_level_atr": round(distance_from_breakout_level_atr, 3),
         }

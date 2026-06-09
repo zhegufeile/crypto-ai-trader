@@ -11,6 +11,9 @@ class FakeCollector:
     async def collect_candidates(self):
         return []
 
+    async def collect_symbol_snapshot(self, symbol):
+        return None
+
 
 class FailingCollector:
     async def collect_candidates(self):
@@ -269,6 +272,16 @@ class FakeCollectorWithCandidate:
 
         return [Candidate(snapshot=MarketSnapshot(symbol="BTCUSDT", price=100000, quote_volume_24h=1e9), hard_score=90)]
 
+    async def collect_symbol_snapshot(self, symbol):
+        return None
+
+
+class FakeCollectorWithSupplementalSnapshot(FakeCollector):
+    async def collect_symbol_snapshot(self, symbol):
+        from app.data.schema import MarketSnapshot
+
+        return MarketSnapshot(symbol=symbol, price=120, atr=2, quote_volume_24h=1e9)
+
 
 class FakeSignalEngineWithSignal:
     def __init__(self, settings=None):
@@ -520,6 +533,56 @@ async def test_run_scan_once_manages_open_trade_even_when_symbol_is_not_in_candi
     assert engine.snapshots[0].symbol == "LABUSDT"
     assert trade_repo.trades[0].status == "closed"
     assert trade_repo.trades[0].exit_reason == "exchange position already flat"
+
+
+@pytest.mark.asyncio
+async def test_run_scan_once_uses_supplemental_snapshot_for_open_trade(monkeypatch):
+    open_trade = SimulatedTrade(
+        symbol="VELVETUSDT",
+        direction="long",
+        structure="breakout",
+        entry=100,
+        stop_loss=95,
+        take_profit=112,
+        notional_usdt=100,
+        quantity=1,
+        remaining_notional_usdt=100,
+        remaining_quantity=1,
+        initial_stop_loss=95,
+        current_stop_loss=112,
+        tp1_price=105,
+        tp2_price=110,
+        tp1_hit=True,
+        tp2_hit=True,
+        trail_active=True,
+        status="open",
+        max_price_seen=120,
+    )
+    journal_repo = NonBlockingJournalRepo(session=object())
+    trade_repo = OpenTradeRepo(session=object(), trade=open_trade)
+    engine = ClosingManagementEngine()
+
+    class PassiveSignalEngine:
+        def __init__(self, settings=None):
+            self.settings = settings
+
+        def generate_signals(self, *args, **kwargs):
+            return []
+
+    monkeypatch.setattr("app.core.scheduler.MarketCollector", lambda settings=None: FakeCollectorWithSupplementalSnapshot())
+    monkeypatch.setattr("app.core.scheduler.SignalRepository", FakeSignalRepo)
+    monkeypatch.setattr("app.core.scheduler.TradeRepository", lambda session: trade_repo)
+    monkeypatch.setattr("app.core.scheduler.TradeJournalRepository", lambda session: journal_repo)
+    monkeypatch.setattr("app.core.scheduler.TradeFeeRepository", FakeFeeRepo)
+    monkeypatch.setattr("app.core.scheduler.SignalEngine", PassiveSignalEngine)
+    monkeypatch.setattr("app.core.scheduler.ExecutionEngine", lambda settings=None: engine)
+
+    result = await run_scan_once(session=object(), settings=Settings())
+
+    assert result["managed_positions"] == 1
+    assert engine.snapshots[0].symbol == "VELVETUSDT"
+    assert engine.snapshots[0].atr == 2
+    assert engine.snapshots[0].source == "binance"
 
 
 @pytest.mark.asyncio

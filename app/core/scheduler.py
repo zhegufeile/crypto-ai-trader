@@ -65,6 +65,7 @@ async def run_scan_once(
                 "stage": "collect_candidates",
             }
         candidate_map = {candidate.snapshot.symbol: candidate.snapshot for candidate in candidates}
+        supplemental_snapshot_map: dict[str, MarketSnapshot] = {}
         managed_trades = []
         state_changes = 0
         open_trades = trade_repo.list_open_trades()
@@ -76,6 +77,16 @@ async def run_scan_once(
                 trade = claimed_trade
             before = trade.model_copy(deep=True)
             snapshot = candidate_map.get(trade.symbol)
+            if snapshot is None:
+                snapshot = supplemental_snapshot_map.get(trade.symbol)
+            if snapshot is None:
+                try:
+                    snapshot = await collector.collect_symbol_snapshot(trade.symbol)
+                except Exception as exc:
+                    logger.warning("failed to collect supplemental snapshot for %s: %s", trade.symbol, exc)
+                    snapshot = None
+                if snapshot is not None:
+                    supplemental_snapshot_map[trade.symbol] = snapshot
             if snapshot is None:
                 snapshot = _fallback_snapshot_for_trade(trade)
             try:
